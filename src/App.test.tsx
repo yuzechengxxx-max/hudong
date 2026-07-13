@@ -5,6 +5,13 @@ import { App, createPlayableHtml } from "./App";
 import { createStarterProject } from "./core/project";
 
 describe("editor workbench", () => {
+  async function createNodeFromCanvas(container: HTMLElement, name: string) {
+    const pane = container.querySelector(".react-flow__pane");
+    expect(pane).toBeInTheDocument();
+    fireEvent.doubleClick(pane!, { clientX: 420, clientY: 260 });
+    await userEvent.click(screen.getByRole("button", { name }));
+  }
+
   it("selects a node and edits its title in the inspector", async () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "要不要赴约？" }));
@@ -23,8 +30,8 @@ describe("editor workbench", () => {
   });
 
   it("adds and deletes a real choice node", async () => {
-    render(<App />);
-    await userEvent.click(screen.getByRole("button", { name: "添加玩家选择" }));
+    const { container } = render(<App />);
+    await createNodeFromCanvas(container, "玩家选择");
     expect(screen.getByRole("button", { name: "新选择" })).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "删除选中节点" }));
     expect(screen.queryByRole("button", { name: "新选择" })).not.toBeInTheDocument();
@@ -41,8 +48,8 @@ describe("editor workbench", () => {
   });
 
   it("creates a scene and connects the selected node", async () => {
-    render(<App />);
-    await userEvent.click(screen.getByRole("button", { name: "视频场景" }));
+    const { container } = render(<App />);
+    await createNodeFromCanvas(container, "视频场景");
     expect(screen.getByRole("button", { name: "新场景" })).toBeVisible();
     await userEvent.selectOptions(screen.getByLabelText("连接到"), "ending");
     expect(screen.getByText("已连接到：黎明之前")).toBeVisible();
@@ -54,6 +61,31 @@ describe("editor workbench", () => {
     const input = screen.getByLabelText("导入素材");
     await userEvent.upload(input, new File(["video"], "scene.mp4", { type: "video/mp4" }));
     expect(screen.getByText("scene.mp4")).toBeVisible();
+  });
+
+  it("clears node selection when the blank canvas is clicked", async () => {
+    const { container } = render(<App />);
+    expect(screen.getByLabelText("节点名称")).toBeVisible();
+    const pane = container.querySelector(".react-flow__pane");
+    expect(pane).toBeInTheDocument();
+    fireEvent.click(pane!);
+    expect(screen.getByText("未选择节点")).toBeVisible();
+  });
+
+  it("opens assets and project tools as temporary drawers", async () => {
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: "素材" }));
+    expect(screen.getByLabelText("导入素材")).toBeInTheDocument();
+    expect(screen.getByText("导入视频、图片、音乐或音效，再在场景节点中选择使用。")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "项目" }));
+    expect(screen.getByRole("button", { name: "导出项目文件" })).toBeVisible();
+  });
+
+  it("provides movable preview window controls", () => {
+    render(<App />);
+    expect(screen.getByRole("button", { name: "重置预览位置" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "收起预览" })).toBeVisible();
+    expect(screen.getByRole("separator", { name: "调整预览大小" })).toBeVisible();
   });
 
   it("provides a real graph canvas and resizable work areas", () => {

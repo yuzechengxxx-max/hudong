@@ -4,7 +4,7 @@
   "packageManager": "pnpm@11.7.0",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build --configLoader runner",
     "test": "vitest run",
     "typecheck": "tsc -b"
   },

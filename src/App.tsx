@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Download, FileJson, Maximize2, Play, Plus, RotateCcw, Save, Search, Trash2, Upload, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Download, FileJson, Maximize2, Minus, Play, Plus, RotateCcw, Save, Search, Trash2, Upload, X } from "lucide-react";
 import { diagnoseProject } from "./core/diagnostics";
 import { createNode, createStarterProject, ProjectSchema, type NodeKind, type Project, type StoryNode } from "./core/project";
 import { createRuntime, type RuntimeSnapshot } from "./core/runtime";
@@ -18,7 +18,8 @@ function loadInitialProject() {
 export function App() {
   const [project, setProject] = useState<Project>(loadInitialProject);
   const [tab, setTab] = useState<Tab>("nodes");
-  const [selectedId, setSelectedId] = useState(() => project.nodes.find(n => n.kind === "choice")?.id ?? project.nodes[0].id);
+  const [selectedId, setSelectedId] = useState<string | undefined>(() => project.nodes.find(n => n.kind === "choice")?.id ?? project.nodes[0].id);
+  const [drawer, setDrawer] = useState<"assets" | "project" | undefined>();
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [showPlayer, setShowPlayer] = useState(false);
   const [savedAt, setSavedAt] = useState("尚未保存");
@@ -29,7 +30,7 @@ export function App() {
   const [runtime, setRuntime] = useState(() => { const value = createRuntime(project); value.start(); return value; });
   const [runtimeState, setRuntimeState] = useState<RuntimeSnapshot>(() => createRuntime(project).start());
   const importRef = useRef<HTMLInputElement>(null);
-  const selected = project.nodes.find(node => node.id === selectedId) ?? project.nodes[0];
+  const selected = project.nodes.find(node => node.id === selectedId);
   const issues = useMemo(() => diagnoseProject(project), [project]);
   const previewNode = project.nodes.find(node => node.id === runtimeState.currentNodeId);
 
@@ -40,9 +41,9 @@ export function App() {
   useEffect(() => { localStorage.setItem("flowfilm-left-width", String(leftWidth)); localStorage.setItem("flowfilm-right-width", String(rightWidth)); localStorage.setItem("flowfilm-timeline-height", String(timelineHeight)); }, [leftWidth, rightWidth, timelineHeight]);
 
   function updateProject(mutator: (current: Project) => Project) { setProject(current => mutator(current)); }
-  function updateSelected(patch: Partial<StoryNode>) { updateProject(current => ({ ...current, nodes: current.nodes.map(node => node.id === selectedId ? { ...node, ...patch } as StoryNode : node) })); }
-  function addNode(kind: Exclude<NodeKind, "start">) { const node = createNode(kind, project.nodes.length); updateProject(current => ({ ...current, nodes: [...current.nodes, node] })); setSelectedId(node.id); setTab("nodes"); }
-  function deleteSelected() { if (selected.kind === "start") return; updateProject(current => ({ ...current, nodes: current.nodes.filter(node => node.id !== selectedId), edges: current.edges.filter(edge => edge.source !== selectedId && edge.target !== selectedId) })); setSelectedId("start"); }
+  function updateSelected(patch: Partial<StoryNode>) { if (!selectedId) return; updateProject(current => ({ ...current, nodes: current.nodes.map(node => node.id === selectedId ? { ...node, ...patch } as StoryNode : node) })); }
+  function addNode(kind: Exclude<NodeKind, "start">, position?: { x: number; y: number }) { const created = createNode(kind, project.nodes.length); const node = position ? { ...created, position } : created; updateProject(current => ({ ...current, nodes: [...current.nodes, node] })); setSelectedId(node.id); setTab("nodes"); }
+  function deleteSelected() { if (!selected || selected.kind === "start") return; updateProject(current => ({ ...current, nodes: current.nodes.filter(node => node.id !== selectedId), edges: current.edges.filter(edge => edge.source !== selectedId && edge.target !== selectedId) })); setSelectedId(undefined); }
   function moveNode(id: string, x: number, y: number) { updateProject(current => ({ ...current, nodes: current.nodes.map(node => node.id === id ? { ...node, position: { x, y } } : node) })); }
 
   function outputPorts(node: StoryNode) {
@@ -52,16 +53,17 @@ export function App() {
     return [{ value: "next", label: "下一步" }];
   }
   function connect(port: string, target: string) {
+    if (!selectedId) return;
     updateProject(current => ({ ...current, edges: [...current.edges.filter(edge => !(edge.source === selectedId && edge.sourcePort === port)), { id: `edge-${selectedId}-${port}`, source: selectedId, sourcePort: port, target }] }));
   }
   function removeEdge(edgeId: string) { updateProject(current => ({ ...current, edges: current.edges.filter(edge => edge.id !== edgeId) })); }
   function addChoiceOption() {
-    if (selected.kind !== "choice") return;
+    if (!selected || selected.kind !== "choice") return;
     const number = selected.choices.length + 1;
     updateSelected({ choices: [...selected.choices, { id: `option-${Date.now()}-${number}`, label: `新选项 ${number}` }] } as Partial<StoryNode>);
   }
   function moveChoiceOption(optionId: string, direction: -1 | 1) {
-    if (selected.kind !== "choice") return;
+    if (!selected || selected.kind !== "choice") return;
     const index = selected.choices.findIndex(choice => choice.id === optionId);
     const target = index + direction;
     if (index < 0 || target < 0 || target >= selected.choices.length) return;
@@ -70,14 +72,14 @@ export function App() {
     updateSelected({ choices } as Partial<StoryNode>);
   }
   function deleteChoiceOption(optionId: string) {
-    if (selected.kind !== "choice" || selected.choices.length <= 1) return;
+    if (!selected || selected.kind !== "choice" || selected.choices.length <= 1) return;
     updateProject(current => ({
       ...current,
       nodes: current.nodes.map(node => node.id === selected.id && node.kind === "choice" ? { ...node, choices: node.choices.filter(choice => choice.id !== optionId) } : node),
       edges: current.edges.filter(edge => !(edge.source === selected.id && edge.sourcePort === optionId)),
     }));
   }
-  const selectNode = useCallback((id: string) => { setSelectedId(id); }, []);
+  const selectNode = useCallback((id?: string) => { setSelectedId(id); }, []);
   const connectGraph = useCallback((source: string, port: string, target: string) => updateProject(current => ({ ...current, edges: [...current.edges.filter(edge => !(edge.source === source && edge.sourcePort === port)), { id: `edge-${source}-${port}`, source, sourcePort: port, target }] })), []);
   const deleteGraphNodes = useCallback((ids: string[]) => updateProject(current => { const removable = new Set(ids.filter(id => current.nodes.find(node => node.id === id)?.kind !== "start")); return { ...current, nodes: current.nodes.filter(node => !removable.has(node.id)), edges: current.edges.filter(edge => !removable.has(edge.source) && !removable.has(edge.target)) }; }), []);
   const deleteGraphEdges = useCallback((ids: string[]) => updateProject(current => ({ ...current, edges: current.edges.filter(edge => !ids.includes(edge.id)) })), []);
@@ -101,31 +103,27 @@ export function App() {
     <header className="topbar">
       <div className="brand-mark">映流 <span>FlowFilm</span></div><div className="crumb">{project.title} / 主剧情</div><div className="top-spacer" />
       <button className="toolbar-button" aria-label="保存项目" onClick={saveProject}><Save size={15}/> 保存</button>
+      <button className="toolbar-button" onClick={() => setDrawer(value => value === "assets" ? undefined : "assets")}><Upload size={15}/> 素材</button>
+      <button className="toolbar-button" onClick={() => setDrawer(value => value === "project" ? undefined : "project")}><FileJson size={15}/> 项目</button>
       <button className="toolbar-button" onClick={() => setShowDiagnostics(true)}><CheckCircle2 size={15}/> 项目检查 <b>{issues.length}</b></button>
       <button className="toolbar-button" onClick={() => { restart(true); setShowPlayer(true); }}><Play size={15}/> 从此处试玩</button>
       <button className="publish" onClick={exportWeb}><Download size={15}/> 导出网页作品</button>
     </header>
 
-    <main className="work-area" style={{ gridTemplateColumns: `${leftWidth}px 5px minmax(0,1fr) 5px ${rightWidth}px` }}>
-      <aside className="left-rail resizable-panel">
-        <div className="rail-tabs"><button className={tab === "nodes" ? "active" : ""} onClick={() => setTab("nodes")}>节点</button><button className={tab === "assets" ? "active" : ""} onClick={() => setTab("assets")}>素材</button><button className={tab === "project" ? "active" : ""} onClick={() => setTab("project")}>项目</button></div>
-        {tab === "nodes" && <NodeLibrary onAdd={addNode} />}
-        {tab === "assets" && <AssetLibrary project={project} onImport={importAsset} onRemove={id => updateProject(current => ({ ...current, assets: current.assets.filter(asset => asset.id !== id), nodes: current.nodes.map(node => node.kind === "scene" && node.assetId === id ? { ...node, assetId: undefined, mediaUrl: "" } : node) }))} />}
-        {tab === "project" && <ProjectPanel project={project} onTitle={title => updateProject(current => ({ ...current, title }))} onExport={exportProject} onImport={() => importRef.current?.click()} onAddVariable={() => updateProject(current => ({ ...current, variables: [...current.variables, { id: `var-${Date.now()}`, name: "新变量", type: "number", initialValue: 0 }] }))} />}
-        <input ref={importRef} hidden type="file" accept=".json,.flowfilm.json" onChange={event => importProject(event.target.files?.[0])}/>
-      </aside>
-      <ResizeHandle orientation="vertical" onResize={delta => setLeftWidth(value => Math.min(420, Math.max(170, value + delta)))}/>
+    <main className="work-area no-library" style={{ gridTemplateColumns: `minmax(0,1fr) 5px ${rightWidth}px` }}>
       <section className="center-stack">
-        <StoryGraph project={project} selectedId={selectedId} onSelect={selectNode} onMove={moveNode} onConnect={connectGraph} onDeleteNodes={deleteGraphNodes} onDeleteEdges={deleteGraphEdges} overlay={<div className="canvas-preview nodrag nopan nowheel"><PreviewDock project={project} node={previewNode} state={runtimeState} onAdvance={() => setRuntimeState(runtime.advance())} onChoose={port => setRuntimeState(runtime.choose(port))} onRestart={() => restart(false)} onExpand={() => setShowPlayer(true)}/><div className="canvas-preview-actions"><button className="preview-command" onClick={() => restart(false)}><RotateCcw size={14}/> 从头预览</button><button className="preview-command" onClick={() => { restart(true); setShowPlayer(true); }}><Maximize2 size={14}/> 弹出试玩</button></div></div>}/>
-        {timelineOpen ? <><ResizeHandle orientation="horizontal" onResize={delta => setTimelineHeight(value => Math.min(420, Math.max(110, value - delta)))}/><div data-testid="timeline-drawer" className="timeline-drawer" style={{ height: timelineHeight }}><Timeline selected={selected}/></div></> : null}
+        <StoryGraph project={project} selectedId={selectedId} onSelect={selectNode} onMove={moveNode} onCreate={(kind, x, y) => addNode(kind, { x, y })} onConnect={connectGraph} onDeleteNodes={deleteGraphNodes} onDeleteEdges={deleteGraphEdges} overlay={<FloatingPreview><PreviewDock project={project} node={previewNode} state={runtimeState} onAdvance={() => setRuntimeState(runtime.advance())} onChoose={port => setRuntimeState(runtime.choose(port))} onRestart={() => restart(false)} onExpand={() => setShowPlayer(true)}/><div className="canvas-preview-actions"><button className="preview-command" onClick={() => restart(false)}><RotateCcw size={14}/> 从头预览</button><button className="preview-command" onClick={() => { restart(true); setShowPlayer(true); }}><Maximize2 size={14}/> 弹出试玩</button></div></FloatingPreview>}/>
+        {timelineOpen ? <><ResizeHandle orientation="horizontal" onResize={delta => setTimelineHeight(value => Math.min(420, Math.max(110, value - delta)))}/><div data-testid="timeline-drawer" className="timeline-drawer" style={{ height: timelineHeight }}><Timeline selected={selected ?? project.nodes[0]}/></div></> : null}
       </section>
       <ResizeHandle orientation="vertical" onResize={delta => setRightWidth(value => Math.min(520, Math.max(260, value - delta)))}/>
-      <aside className="inspector resizable-panel"><div className="inspector-title">属性</div><div className="form">
+      <aside className="inspector resizable-panel"><div className="inspector-title">属性</div><div className="form">{selected ? <>
         <Inspector project={project} selected={selected} updateSelected={updateSelected} onAddChoice={addChoiceOption} onMoveChoice={moveChoiceOption} onDeleteChoice={deleteChoiceOption}/>
         {outputPorts(selected).map(port => { const edge = project.edges.find(item => item.source === selected.id && item.sourcePort === port.value); return <div className="connection-row" key={port.value}><label>{port.label}<select aria-label={port.value === "next" ? "连接到" : `${port.label}连接到`} value={edge?.target ?? ""} onChange={event => event.target.value && connect(port.value, event.target.value)}><option value="">未连接</option>{project.nodes.filter(node => node.id !== selected.id).map(node => <option key={node.id} value={node.id}>{node.title}</option>)}</select></label>{edge && <><small>已连接到：{project.nodes.find(node => node.id === edge.target)?.title}</small><button className="icon-text" onClick={() => removeEdge(edge.id)}>断开</button></>}</div>; })}
         <button className="danger-button" aria-label="删除选中节点" disabled={selected.kind === "start"} onClick={deleteSelected}><Trash2 size={14}/> 删除选中节点</button>
         <div className="theme-section"><h3>游戏 UI</h3><label>强调色<input aria-label="强调色" type="color" value={project.ui.accent} onChange={event => updateProject(current => ({ ...current, ui: { ...current.ui, accent: event.target.value } }))}/></label><label>对话框透明度<input type="range" min="0.3" max="1" step="0.05" value={project.ui.dialogueOpacity} onChange={event => updateProject(current => ({ ...current, ui: { ...current.ui, dialogueOpacity: Number(event.target.value) } }))}/></label></div>
-      </div></aside>
+      </> : <div className="inspector-empty"><p>未选择节点</p><small>单击节点查看属性，或双击画布创建节点。</small></div>}</div></aside>
+      {drawer && <aside className="workspace-drawer"><header><b>{drawer === "assets" ? "素材" : "项目"}</b><button aria-label="关闭面板" onClick={() => setDrawer(undefined)}><X size={16}/></button></header>{drawer === "assets" ? <AssetLibrary project={project} onImport={importAsset} onRemove={id => updateProject(current => ({ ...current, assets: current.assets.filter(asset => asset.id !== id), nodes: current.nodes.map(node => node.kind === "scene" && node.assetId === id ? { ...node, assetId: undefined, mediaUrl: "" } : node) }))}/> : <ProjectPanel project={project} onTitle={title => updateProject(current => ({ ...current, title }))} onExport={exportProject} onImport={() => importRef.current?.click()} onAddVariable={() => updateProject(current => ({ ...current, variables: [...current.variables, { id: `var-${Date.now()}`, name: "新变量", type: "number", initialValue: 0 }] }))}/>}</aside>}
+      <input ref={importRef} hidden type="file" accept=".json,.flowfilm.json" onChange={event => importProject(event.target.files?.[0])}/>
     </main>
     <footer className="statusbar"><span className={issues.some(issue => issue.severity === "error") ? "unhealthy" : "healthy"}>{issues.length ? <AlertTriangle size={12}/> : <CheckCircle2 size={12}/>} {issues.length ? `${issues.length} 个问题` : "项目正常"}</span><span>{project.nodes.length} 个节点</span><span>{project.assets.length} 个素材</span><span>{project.variables.length} 个变量</span><span className="top-spacer"/><button aria-label="演出时间线" className={timelineOpen ? "active" : ""} onClick={() => setTimelineOpen(value => !value)}>演出时间线</button><button onClick={() => { setLeftWidth(230); setRightWidth(330); setTimelineHeight(190); }}>恢复布局</button></footer>
     {showDiagnostics && <Modal title="项目检查" onClose={() => setShowDiagnostics(false)}><div className="issue-list">{issues.length ? issues.map((issue, index) => <button key={`${issue.code}-${index}`} onClick={() => { if (issue.nodeId) setSelectedId(issue.nodeId); setShowDiagnostics(false); }}><b>{issue.severity === "error" ? "错误" : "警告"}</b><span>{issue.message}</span></button>) : <div className="empty-state"><CheckCircle2 size={32}/><h3>项目可以发布</h3><p>没有发现剧情连接问题。</p></div>}</div></Modal>}
@@ -160,6 +158,18 @@ function Inspector({ project, selected, updateSelected, onAddChoice, onMoveChoic
 
 function DynamicEdges({ project }: { project: Project }) { return <svg className="connections">{project.edges.map(edge => { const source = project.nodes.find(node => node.id === edge.source); const target = project.nodes.find(node => node.id === edge.target); if (!source || !target) return null; const x1 = source.position.x + 185, y1 = source.position.y + 48, x2 = target.position.x, y2 = target.position.y + 48; return <path key={edge.id} d={`M ${x1} ${y1} C ${x1 + 55} ${y1}, ${x2 - 55} ${y2}, ${x2} ${y2}`}/>; })}</svg>; }
 function Timeline({ selected }: { selected: StoryNode }) { return <div className="timeline"><div className="track-labels"><b>演出时间线</b><span>画面</span><span>字幕 / 对白</span><span>音乐 / 音效</span><span>互动</span></div><div className="tracks"><div className="ruler">00:00　　　00:05　　　00:10　　　00:15</div><div className="clip video">{selected.kind === "scene" ? selected.title : "选择场景节点编辑演出"}</div><div className="clip dialogue">{selected.kind === "scene" ? selected.dialogue : "字幕轨道"}</div><div className="clip audio">环境音与配乐轨道</div><div className="clip choice">{selected.kind === "choice" ? "显示选项" : "互动轨道"}</div></div></div>; }
+function FloatingPreview({ children }: { children: React.ReactNode }) {
+  const [position, setPosition] = useState(() => { try { return JSON.parse(localStorage.getItem("flowfilm-preview-position") ?? "null") ?? { x: 12, y: 12 }; } catch { return { x: 12, y: 12 }; } });
+  const [width, setWidth] = useState(() => Number(localStorage.getItem("flowfilm-preview-width")) || 280);
+  const [collapsed, setCollapsed] = useState(false);
+  const drag = useRef<{ x: number; y: number; left: number; top: number } | undefined>(undefined);
+  const resize = useRef<{ x: number; width: number } | undefined>(undefined);
+  useEffect(() => { localStorage.setItem("flowfilm-preview-position", JSON.stringify(position)); localStorage.setItem("flowfilm-preview-width", String(width)); }, [position, width]);
+  return <section className={`floating-preview nodrag nopan nowheel ${collapsed ? "collapsed" : ""}`} style={{ left: position.x, top: position.y, width }}>
+    <header className="floating-preview-title" onPointerDown={event => { drag.current = { x: event.clientX, y: event.clientY, left: position.x, top: position.y }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!drag.current || !event.currentTarget.hasPointerCapture(event.pointerId)) return; setPosition({ x: Math.max(0, drag.current.left + event.clientX - drag.current.x), y: Math.max(0, drag.current.top + event.clientY - drag.current.y) }); }} onPointerUp={() => { drag.current = undefined; }}><b>试玩预览</b><button aria-label="重置预览位置" onPointerDown={event => event.stopPropagation()} onClick={() => { setPosition({ x: 12, y: 12 }); setWidth(280); }}><RotateCcw size={13}/></button><button aria-label={collapsed ? "展开预览" : "收起预览"} onPointerDown={event => event.stopPropagation()} onClick={() => setCollapsed(value => !value)}>{collapsed ? <Maximize2 size={13}/> : <Minus size={13}/>}</button></header>
+    {!collapsed && <div className="floating-preview-content">{children}<div className="preview-resize" role="separator" aria-label="调整预览大小" onPointerDown={event => { resize.current = { x: event.clientX, width }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!resize.current || !event.currentTarget.hasPointerCapture(event.pointerId)) return; setWidth(Math.min(520, Math.max(240, resize.current.width + event.clientX - resize.current.x))); }} onPointerUp={() => { resize.current = undefined; }}/></div>}
+  </section>;
+}
 function PreviewDock({ project, node, state, onAdvance, onChoose, onRestart, onExpand }: { project: Project; node?: StoryNode; state: RuntimeSnapshot; onAdvance(): void; onChoose(port: string): void; onRestart(): void; onExpand?: () => void }) {
   const asset = node?.kind === "scene" ? project.assets.find(item => item.id === node.assetId) : undefined;
   const isVideo = asset?.type.startsWith("video/") ?? false;
