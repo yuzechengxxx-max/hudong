@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Download, FileJson, Maximize2, Play, Plus, RotateCcw, Save, Search, Settings2, Trash2, Upload, X } from "lucide-react";
 import { diagnoseProject } from "./core/diagnostics";
 import { createNode, createStarterProject, ProjectSchema, type NodeKind, type Project, type StoryNode } from "./core/project";
 import { createRuntime, type RuntimeSnapshot } from "./core/runtime";
+import { ResizeHandle } from "./editor/ResizeHandle";
+import { StoryGraph } from "./editor/StoryGraph";
 
 type Tab = "nodes" | "assets" | "project";
 const labels: Record<NodeKind, string> = { start: "故事入口", scene: "视频场景", choice: "玩家选择", condition: "条件判断", setVariable: "修改变量", ending: "故事结局" };
@@ -20,6 +22,11 @@ export function App() {
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [showPlayer, setShowPlayer] = useState(false);
   const [savedAt, setSavedAt] = useState("尚未保存");
+  const [rightTab, setRightTab] = useState<"inspector" | "preview">("inspector");
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const [leftWidth, setLeftWidth] = useState(() => Number(localStorage.getItem("flowfilm-left-width")) || 230);
+  const [rightWidth, setRightWidth] = useState(() => Number(localStorage.getItem("flowfilm-right-width")) || 330);
+  const [timelineHeight, setTimelineHeight] = useState(() => Number(localStorage.getItem("flowfilm-timeline-height")) || 190);
   const [runtime, setRuntime] = useState(() => { const value = createRuntime(project); value.start(); return value; });
   const [runtimeState, setRuntimeState] = useState<RuntimeSnapshot>(() => createRuntime(project).start());
   const importRef = useRef<HTMLInputElement>(null);
@@ -31,6 +38,7 @@ export function App() {
     const timer = window.setTimeout(() => { localStorage.setItem("flowfilm-project", JSON.stringify(project)); setSavedAt(new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })); }, 350);
     return () => window.clearTimeout(timer);
   }, [project]);
+  useEffect(() => { localStorage.setItem("flowfilm-left-width", String(leftWidth)); localStorage.setItem("flowfilm-right-width", String(rightWidth)); localStorage.setItem("flowfilm-timeline-height", String(timelineHeight)); }, [leftWidth, rightWidth, timelineHeight]);
 
   function updateProject(mutator: (current: Project) => Project) { setProject(current => mutator(current)); }
   function updateSelected(patch: Partial<StoryNode>) { updateProject(current => ({ ...current, nodes: current.nodes.map(node => node.id === selectedId ? { ...node, ...patch } as StoryNode : node) })); }
@@ -48,6 +56,10 @@ export function App() {
     updateProject(current => ({ ...current, edges: [...current.edges.filter(edge => !(edge.source === selectedId && edge.sourcePort === port)), { id: `edge-${selectedId}-${port}`, source: selectedId, sourcePort: port, target }] }));
   }
   function removeEdge(edgeId: string) { updateProject(current => ({ ...current, edges: current.edges.filter(edge => edge.id !== edgeId) })); }
+  const selectNode = useCallback((id: string) => { setSelectedId(id); setRightTab("inspector"); }, []);
+  const connectGraph = useCallback((source: string, port: string, target: string) => updateProject(current => ({ ...current, edges: [...current.edges.filter(edge => !(edge.source === source && edge.sourcePort === port)), { id: `edge-${source}-${port}`, source, sourcePort: port, target }] })), []);
+  const deleteGraphNodes = useCallback((ids: string[]) => updateProject(current => { const removable = new Set(ids.filter(id => current.nodes.find(node => node.id === id)?.kind !== "start")); return { ...current, nodes: current.nodes.filter(node => !removable.has(node.id)), edges: current.edges.filter(edge => !removable.has(edge.source) && !removable.has(edge.target)) }; }), []);
+  const deleteGraphEdges = useCallback((ids: string[]) => updateProject(current => ({ ...current, edges: current.edges.filter(edge => !ids.includes(edge.id)) })), []);
 
   function saveProject() { localStorage.setItem("flowfilm-project", JSON.stringify(project)); setSavedAt("刚刚"); }
   function restart(fromSelected = false) { const next = createRuntime(project); setRuntime(next); setRuntimeState(next.start(fromSelected ? selectedId : undefined)); }
@@ -73,35 +85,28 @@ export function App() {
       <button className="publish" onClick={exportWeb}><Download size={15}/> 导出网页作品</button>
     </header>
 
-    <main className="workspace">
-      <aside className="left-rail">
+    <main className="work-area" style={{ gridTemplateColumns: `${leftWidth}px 5px minmax(0,1fr) 5px ${rightWidth}px` }}>
+      <aside className="left-rail resizable-panel">
         <div className="rail-tabs"><button className={tab === "nodes" ? "active" : ""} onClick={() => setTab("nodes")}>节点</button><button className={tab === "assets" ? "active" : ""} onClick={() => setTab("assets")}>素材</button><button className={tab === "project" ? "active" : ""} onClick={() => setTab("project")}>项目</button></div>
         {tab === "nodes" && <NodeLibrary onAdd={addNode} />}
         {tab === "assets" && <AssetLibrary project={project} onImport={importAsset} onRemove={id => updateProject(current => ({ ...current, assets: current.assets.filter(asset => asset.id !== id), nodes: current.nodes.map(node => node.kind === "scene" && node.assetId === id ? { ...node, assetId: undefined, mediaUrl: "" } : node) }))} />}
         {tab === "project" && <ProjectPanel project={project} onTitle={title => updateProject(current => ({ ...current, title }))} onExport={exportProject} onImport={() => importRef.current?.click()} onAddVariable={() => updateProject(current => ({ ...current, variables: [...current.variables, { id: `var-${Date.now()}`, name: "新变量", type: "number", initialValue: 0 }] }))} />}
         <input ref={importRef} hidden type="file" accept=".json,.flowfilm.json" onChange={event => importProject(event.target.files?.[0])}/>
       </aside>
-
-      <section className="center">
-        <div className="canvas">
-          <div className="canvas-meta"><span>剧情图 · {project.nodes.length} 个节点</span><span>自动保存：{savedAt}</span></div>
-          <DynamicEdges project={project}/>
-          {project.nodes.map(node => <button key={node.id} aria-label={node.title} className={`story-node ${selectedId === node.id ? "selected" : ""}`} style={{ left: node.position.x, top: node.position.y, "--node-color": colors[node.kind] } as React.CSSProperties} onClick={() => setSelectedId(node.id)} draggable onDragEnd={event => { const bounds = event.currentTarget.parentElement?.getBoundingClientRect(); if (bounds) moveNode(node.id, Math.max(10, event.clientX - bounds.left - 90), Math.max(45, event.clientY - bounds.top - 45)); }}>
-            <span className="node-type">{labels[node.kind]}</span><strong>{node.title}</strong><small>{nodeSummary(node)}</small>
-          </button>)}
-          <PreviewDock project={project} node={previewNode} state={runtimeState} onAdvance={() => setRuntimeState(runtime.advance())} onChoose={port => setRuntimeState(runtime.choose(port))} onRestart={() => restart(false)} onExpand={() => setShowPlayer(true)}/>
-        </div>
-        <Timeline selected={selected}/>
+      <ResizeHandle orientation="vertical" onResize={delta => setLeftWidth(value => Math.min(420, Math.max(170, value + delta)))}/>
+      <section className="center-stack">
+        <StoryGraph project={project} selectedId={selectedId} onSelect={selectNode} onMove={moveNode} onConnect={connectGraph} onDeleteNodes={deleteGraphNodes} onDeleteEdges={deleteGraphEdges}/>
+        {timelineOpen ? <><ResizeHandle orientation="horizontal" onResize={delta => setTimelineHeight(value => Math.min(420, Math.max(110, value - delta)))}/><div data-testid="timeline-drawer" className="timeline-drawer" style={{ height: timelineHeight }}><Timeline selected={selected}/></div></> : null}
       </section>
-
-      <aside className="inspector"><div className="inspector-title"><Settings2 size={16}/> 属性与连接</div><div className="form">
+      <ResizeHandle orientation="vertical" onResize={delta => setRightWidth(value => Math.min(520, Math.max(260, value - delta)))}/>
+      <aside className="inspector resizable-panel"><div className="right-tabs"><button className={rightTab === "inspector" ? "active" : ""} onClick={() => setRightTab("inspector")}><Settings2 size={14}/> 属性</button><button className={rightTab === "preview" ? "active" : ""} onClick={() => setRightTab("preview")}><Play size={14}/> 预览</button></div>{rightTab === "inspector" ? <div className="form">
         <Inspector project={project} selected={selected} updateSelected={updateSelected}/>
         {outputPorts(selected).map(port => { const edge = project.edges.find(item => item.source === selected.id && item.sourcePort === port.value); return <div className="connection-row" key={port.value}><label>{port.label}<select aria-label={port.value === "next" ? "连接到" : `${port.label}连接到`} value={edge?.target ?? ""} onChange={event => event.target.value && connect(port.value, event.target.value)}><option value="">未连接</option>{project.nodes.filter(node => node.id !== selected.id).map(node => <option key={node.id} value={node.id}>{node.title}</option>)}</select></label>{edge && <><small>已连接到：{project.nodes.find(node => node.id === edge.target)?.title}</small><button className="icon-text" onClick={() => removeEdge(edge.id)}>断开</button></>}</div>; })}
         <button className="danger-button" aria-label="删除选中节点" disabled={selected.kind === "start"} onClick={deleteSelected}><Trash2 size={14}/> 删除选中节点</button>
         <div className="theme-section"><h3>游戏 UI</h3><label>强调色<input aria-label="强调色" type="color" value={project.ui.accent} onChange={event => updateProject(current => ({ ...current, ui: { ...current.ui, accent: event.target.value } }))}/></label><label>对话框透明度<input type="range" min="0.3" max="1" step="0.05" value={project.ui.dialogueOpacity} onChange={event => updateProject(current => ({ ...current, ui: { ...current.ui, dialogueOpacity: Number(event.target.value) } }))}/></label></div>
-      </div></aside>
+      </div> : <div className="docked-preview"><PreviewDock project={project} node={previewNode} state={runtimeState} onAdvance={() => setRuntimeState(runtime.advance())} onChoose={port => setRuntimeState(runtime.choose(port))} onRestart={() => restart(false)} onExpand={() => setShowPlayer(true)}/><button className="preview-command" onClick={() => restart(false)}><RotateCcw size={14}/> 从头预览</button><button className="preview-command" onClick={() => { restart(true); setShowPlayer(true); }}><Maximize2 size={14}/> 弹出试玩</button></div>}</aside>
     </main>
-    <footer className="statusbar"><span className={issues.some(issue => issue.severity === "error") ? "unhealthy" : "healthy"}>{issues.length ? <AlertTriangle size={12}/> : <CheckCircle2 size={12}/>} {issues.length ? `${issues.length} 个问题` : "项目正常"}</span><span>{project.nodes.length} 个节点</span><span>{project.assets.length} 个素材</span><span>{project.variables.length} 个变量</span><span className="top-spacer"/><span>拖动节点可调整位置</span></footer>
+    <footer className="statusbar"><span className={issues.some(issue => issue.severity === "error") ? "unhealthy" : "healthy"}>{issues.length ? <AlertTriangle size={12}/> : <CheckCircle2 size={12}/>} {issues.length ? `${issues.length} 个问题` : "项目正常"}</span><span>{project.nodes.length} 个节点</span><span>{project.assets.length} 个素材</span><span>{project.variables.length} 个变量</span><span className="top-spacer"/><button aria-label="演出时间线" className={timelineOpen ? "active" : ""} onClick={() => setTimelineOpen(value => !value)}>演出时间线</button><button onClick={() => { setLeftWidth(230); setRightWidth(330); setTimelineHeight(190); }}>恢复布局</button></footer>
     {showDiagnostics && <Modal title="项目检查" onClose={() => setShowDiagnostics(false)}><div className="issue-list">{issues.length ? issues.map((issue, index) => <button key={`${issue.code}-${index}`} onClick={() => { if (issue.nodeId) setSelectedId(issue.nodeId); setShowDiagnostics(false); }}><b>{issue.severity === "error" ? "错误" : "警告"}</b><span>{issue.message}</span></button>) : <div className="empty-state"><CheckCircle2 size={32}/><h3>项目可以发布</h3><p>没有发现剧情连接问题。</p></div>}</div></Modal>}
     {showPlayer && <Modal wide title="独立试玩" onClose={() => setShowPlayer(false)}><div className="full-player"><PreviewDock project={project} node={previewNode} state={runtimeState} onAdvance={() => setRuntimeState(runtime.advance())} onChoose={port => setRuntimeState(runtime.choose(port))} onRestart={() => restart(false)}/><aside><h3>运行状态</h3>{Object.entries(runtimeState.variables).map(([key, value]) => <p key={key}>{project.variables.find(item => item.id === key)?.name ?? key}<b>{String(value)}</b></p>)}<button onClick={() => restart(false)}><RotateCcw size={14}/> 从头开始</button></aside></div></Modal>}
   </div>;

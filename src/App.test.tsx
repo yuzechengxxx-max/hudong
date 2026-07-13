@@ -15,6 +15,7 @@ describe("editor workbench", () => {
 
   it("previews a branch choice", async () => {
     render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: "预览" }));
     await userEvent.click(screen.getByRole("button", { name: "继续剧情" }));
     await userEvent.click(screen.getByRole("button", { name: "前往旧仓库" }));
     expect(screen.getByRole("heading", { name: "未完的来信" })).toBeVisible();
@@ -52,5 +53,19 @@ describe("editor workbench", () => {
     const input = screen.getByLabelText("导入素材");
     await userEvent.upload(input, new File(["video"], "scene.mp4", { type: "video/mp4" }));
     expect(screen.getByText("scene.mp4")).toBeVisible();
+  });
+
+  it("provides a real graph canvas and resizable work areas", () => {
+    render(<App />);
+    expect(screen.getByTestId("story-graph")).toBeVisible();
+    expect(screen.getAllByRole("separator").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByTitle("Fit view")).toBeVisible();
+  });
+
+  it("keeps the timeline collapsed until requested", async () => {
+    render(<App />);
+    expect(screen.queryByTestId("timeline-drawer")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "演出时间线" }));
+    expect(screen.getByTestId("timeline-drawer")).toBeVisible();
   });
 });
