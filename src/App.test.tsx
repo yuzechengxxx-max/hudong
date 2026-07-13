@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { App } from "./App";
@@ -6,7 +6,7 @@ import { App } from "./App";
 describe("editor workbench", () => {
   it("selects a node and edits its title in the inspector", async () => {
     render(<App />);
-    await userEvent.click(screen.getByRole("button", { name: "要不要赴约？" }));
+    fireEvent.click(screen.getByRole("button", { name: "要不要赴约？" }));
     const title = screen.getByLabelText("节点名称");
     await userEvent.clear(title);
     await userEvent.type(title, "是否进入仓库");
@@ -15,7 +15,7 @@ describe("editor workbench", () => {
 
   it("previews a branch choice", async () => {
     render(<App />);
-    await userEvent.click(screen.getByRole("button", { name: "预览" }));
+    expect(screen.queryByRole("button", { name: "预览" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "继续剧情" }));
     await userEvent.click(screen.getByRole("button", { name: "前往旧仓库" }));
     expect(screen.getByRole("heading", { name: "未完的来信" })).toBeVisible();
@@ -31,7 +31,7 @@ describe("editor workbench", () => {
 
   it("saves edits to browser storage", async () => {
     render(<App />);
-    await userEvent.click(screen.getByRole("button", { name: "要不要赴约？" }));
+    fireEvent.click(screen.getByRole("button", { name: "要不要赴约？" }));
     const title = screen.getByLabelText("节点名称");
     await userEvent.clear(title);
     await userEvent.type(title, "保存后的选择");
@@ -56,10 +56,12 @@ describe("editor workbench", () => {
   });
 
   it("provides a real graph canvas and resizable work areas", () => {
-    render(<App />);
+    const { container } = render(<App />);
     expect(screen.getByTestId("story-graph")).toBeVisible();
     expect(screen.getAllByRole("separator").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByTitle("Fit view")).toBeVisible();
+    expect(container.querySelector(".graph-node-body")).not.toHaveClass("nodrag");
+    expect(container.querySelector(".react-flow__minimap")).toHaveStyle({ width: "140px", height: "96px" });
   });
 
   it("keeps the timeline collapsed until requested", async () => {
