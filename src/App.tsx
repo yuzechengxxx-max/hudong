@@ -1,103 +1,126 @@
-import { useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Download, Maximize2, Play, Plus, RotateCcw, Save, Search, Settings2, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, CheckCircle2, Download, FileJson, Maximize2, Play, Plus, RotateCcw, Save, Search, Settings2, Trash2, Upload, X } from "lucide-react";
 import { diagnoseProject } from "./core/diagnostics";
-import { createStarterProject, type Project, type StoryNode } from "./core/project";
+import { createNode, createStarterProject, ProjectSchema, type NodeKind, type Project, type StoryNode } from "./core/project";
 import { createRuntime, type RuntimeSnapshot } from "./core/runtime";
 
-const nodeColor: Record<StoryNode["kind"], string> = { start: "#83909c", scene: "#4b8fac", choice: "#d1a83d", condition: "#54a77b", setVariable: "#bd6d6d", ending: "#d46f48" };
+type Tab = "nodes" | "assets" | "project";
+const labels: Record<NodeKind, string> = { start: "故事入口", scene: "视频场景", choice: "玩家选择", condition: "条件判断", setVariable: "修改变量", ending: "故事结局" };
+const colors: Record<NodeKind, string> = { start: "#83909c", scene: "#4b8fac", choice: "#d1a83d", condition: "#54a77b", setVariable: "#bd6d6d", ending: "#d46f48" };
+
+function loadInitialProject() {
+  try { const saved = localStorage.getItem("flowfilm-project"); return saved ? ProjectSchema.parse(JSON.parse(saved)) : createStarterProject(); }
+  catch { return createStarterProject(); }
+}
 
 export function App() {
-  const [project, setProject] = useState<Project>(createStarterProject);
-  const [selectedId, setSelectedId] = useState("choice");
+  const [project, setProject] = useState<Project>(loadInitialProject);
+  const [tab, setTab] = useState<Tab>("nodes");
+  const [selectedId, setSelectedId] = useState(() => project.nodes.find(n => n.kind === "choice")?.id ?? project.nodes[0].id);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [showPlayer, setShowPlayer] = useState(false);
+  const [savedAt, setSavedAt] = useState("尚未保存");
+  const [runtime, setRuntime] = useState(() => { const value = createRuntime(project); value.start(); return value; });
   const [runtimeState, setRuntimeState] = useState<RuntimeSnapshot>(() => createRuntime(project).start());
-  const [runtime, setRuntime] = useState(() => {
-    const instance = createRuntime(project);
-    instance.start();
-    return instance;
-  });
+  const importRef = useRef<HTMLInputElement>(null);
   const selected = project.nodes.find(node => node.id === selectedId) ?? project.nodes[0];
   const issues = useMemo(() => diagnoseProject(project), [project]);
-
-  function saveProject() { localStorage.setItem("flowfilm-project", JSON.stringify(project)); }
-  function addChoiceNode() {
-    const id = `choice-${Date.now()}`;
-    const node: StoryNode = { id, kind: "choice", title: "新选择", prompt: "请选择接下来的行动", position: { x: 430, y: 310 }, choices: [{ id: "option-a", label: "选项一" }, { id: "option-b", label: "选项二" }] };
-    setProject(current => ({ ...current, nodes: [...current.nodes, node] })); setSelectedId(id);
-  }
-  function deleteSelected() {
-    if (selected.kind === "start") return;
-    setProject(current => ({ ...current, nodes: current.nodes.filter(node => node.id !== selectedId), edges: current.edges.filter(edge => edge.source !== selectedId && edge.target !== selectedId) })); setSelectedId("start");
-  }
-  function downloadProject() {
-    const url = URL.createObjectURL(new Blob([JSON.stringify(project, null, 2)], { type: "application/json;charset=utf-8" }));
-    const link = document.createElement("a"); link.href = url; link.download = `${project.title}.flowfilm.json`; link.click(); URL.revokeObjectURL(url);
-  }
-  function moveNode(id: string, x: number, y: number) { setProject(current => ({ ...current, nodes: current.nodes.map(node => node.id === id ? { ...node, position: { x, y } } : node) })); }
-
-  function updateSelected(patch: Partial<StoryNode>) {
-    setProject(current => ({ ...current, nodes: current.nodes.map(node => node.id === selectedId ? { ...node, ...patch } as StoryNode : node) }));
-  }
-
-  function restart() {
-    const next = createRuntime(project);
-    setRuntime(next);
-    setRuntimeState(next.start());
-  }
-
-  function nextPreview() { setRuntimeState(runtime.advance()); }
-  function choose(port: string) { setRuntimeState(runtime.choose(port)); }
   const previewNode = project.nodes.find(node => node.id === runtimeState.currentNodeId);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => { localStorage.setItem("flowfilm-project", JSON.stringify(project)); setSavedAt(new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })); }, 350);
+    return () => window.clearTimeout(timer);
+  }, [project]);
+
+  function updateProject(mutator: (current: Project) => Project) { setProject(current => mutator(current)); }
+  function updateSelected(patch: Partial<StoryNode>) { updateProject(current => ({ ...current, nodes: current.nodes.map(node => node.id === selectedId ? { ...node, ...patch } as StoryNode : node) })); }
+  function addNode(kind: Exclude<NodeKind, "start">) { const node = createNode(kind, project.nodes.length); updateProject(current => ({ ...current, nodes: [...current.nodes, node] })); setSelectedId(node.id); setTab("nodes"); }
+  function deleteSelected() { if (selected.kind === "start") return; updateProject(current => ({ ...current, nodes: current.nodes.filter(node => node.id !== selectedId), edges: current.edges.filter(edge => edge.source !== selectedId && edge.target !== selectedId) })); setSelectedId("start"); }
+  function moveNode(id: string, x: number, y: number) { updateProject(current => ({ ...current, nodes: current.nodes.map(node => node.id === id ? { ...node, position: { x, y } } : node) })); }
+
+  function outputPorts(node: StoryNode) {
+    if (node.kind === "choice") return node.choices.map(choice => ({ value: choice.id, label: choice.label }));
+    if (node.kind === "condition") return [{ value: "true", label: "条件成立" }, { value: "false", label: "条件不成立" }];
+    if (node.kind === "ending") return [];
+    return [{ value: "next", label: "下一步" }];
+  }
+  function connect(port: string, target: string) {
+    updateProject(current => ({ ...current, edges: [...current.edges.filter(edge => !(edge.source === selectedId && edge.sourcePort === port)), { id: `edge-${selectedId}-${port}`, source: selectedId, sourcePort: port, target }] }));
+  }
+  function removeEdge(edgeId: string) { updateProject(current => ({ ...current, edges: current.edges.filter(edge => edge.id !== edgeId) })); }
+
+  function saveProject() { localStorage.setItem("flowfilm-project", JSON.stringify(project)); setSavedAt("刚刚"); }
+  function restart(fromSelected = false) { const next = createRuntime(project); setRuntime(next); setRuntimeState(next.start(fromSelected ? selectedId : undefined)); }
+  function download(name: string, content: string, type: string) { const url = URL.createObjectURL(new Blob([content], { type })); const link = document.createElement("a"); link.href = url; link.download = name; link.click(); URL.revokeObjectURL(url); }
+  function exportProject() { download(`${project.title}.flowfilm.json`, JSON.stringify(project, null, 2), "application/json;charset=utf-8"); }
+  function exportWeb() { download(`${project.title}.html`, createPlayableHtml(project), "text/html;charset=utf-8"); }
+  function importProject(file?: File) { if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const next = ProjectSchema.parse(JSON.parse(String(reader.result))); setProject(next); setSelectedId(next.nodes[0].id); restart(); } catch { window.alert("项目文件格式不正确"); } }; reader.readAsText(file, "utf-8"); }
+  function importAsset(file?: File) {
+    if (!file) return;
+    const id = `asset-${Date.now()}`;
+    updateProject(current => ({ ...current, assets: [...current.assets, { id, name: file.name, type: file.type || "application/octet-stream", size: file.size, url: "" }] }));
+    const reader = new FileReader();
+    reader.onload = () => updateProject(current => ({ ...current, assets: current.assets.map(asset => asset.id === id ? { ...asset, url: String(reader.result) } : asset) }));
+    reader.readAsDataURL(file);
+  }
 
   return <div className="app-shell">
     <header className="topbar">
-      <div className="brand-mark">映流 <span>FlowFilm</span></div><div className="crumb">雾港来信 / 第一章</div>
-      <div className="top-spacer" />
-      <button className="toolbar-button" aria-label="保存项目" onClick={saveProject}><Save size={15}/> 保存项目</button>
-      <button className="toolbar-button"><CheckCircle2 size={15}/> 项目检查 <b>{issues.length}</b></button>
-      <button className="toolbar-button" onClick={restart}><Play size={15}/> 从此处试玩</button>
-      <button className="publish" onClick={downloadProject}><Download size={15}/> 导出项目</button>
+      <div className="brand-mark">映流 <span>FlowFilm</span></div><div className="crumb">{project.title} / 主剧情</div><div className="top-spacer" />
+      <button className="toolbar-button" aria-label="保存项目" onClick={saveProject}><Save size={15}/> 保存</button>
+      <button className="toolbar-button" onClick={() => setShowDiagnostics(true)}><CheckCircle2 size={15}/> 项目检查 <b>{issues.length}</b></button>
+      <button className="toolbar-button" onClick={() => { restart(true); setShowPlayer(true); }}><Play size={15}/> 从此处试玩</button>
+      <button className="publish" onClick={exportWeb}><Download size={15}/> 导出网页作品</button>
     </header>
+
     <main className="workspace">
       <aside className="left-rail">
-        <div className="rail-tabs"><button className="active">节点</button><button>素材</button><button>项目</button></div>
-        <label className="search"><Search size={14}/><input aria-label="搜索节点" placeholder="搜索节点或素材"/></label>
-        <LibraryGroup title="叙事" items={[["scene","视频场景"],["scene","对白演出"],["choice","玩家选择"]]} onAdd={kind => kind === "choice" && addChoiceNode()} />
-        <LibraryGroup title="逻辑" items={[["condition","条件判断"],["setVariable","修改变量"],["ending","故事结局"]]} onAdd={() => undefined} />
-        <button className="add-node" onClick={addChoiceNode}><Plus size={15}/> 添加玩家选择</button>
+        <div className="rail-tabs"><button className={tab === "nodes" ? "active" : ""} onClick={() => setTab("nodes")}>节点</button><button className={tab === "assets" ? "active" : ""} onClick={() => setTab("assets")}>素材</button><button className={tab === "project" ? "active" : ""} onClick={() => setTab("project")}>项目</button></div>
+        {tab === "nodes" && <NodeLibrary onAdd={addNode} />}
+        {tab === "assets" && <AssetLibrary project={project} onImport={importAsset} onRemove={id => updateProject(current => ({ ...current, assets: current.assets.filter(asset => asset.id !== id), nodes: current.nodes.map(node => node.kind === "scene" && node.assetId === id ? { ...node, assetId: undefined, mediaUrl: "" } : node) }))} />}
+        {tab === "project" && <ProjectPanel project={project} onTitle={title => updateProject(current => ({ ...current, title }))} onExport={exportProject} onImport={() => importRef.current?.click()} onAddVariable={() => updateProject(current => ({ ...current, variables: [...current.variables, { id: `var-${Date.now()}`, name: "新变量", type: "number", initialValue: 0 }] }))} />}
+        <input ref={importRef} hidden type="file" accept=".json,.flowfilm.json" onChange={event => importProject(event.target.files?.[0])}/>
       </aside>
+
       <section className="center">
         <div className="canvas">
-          <div className="canvas-meta"><span>剧情图 · 第一章</span><span>78% · 自动保存于刚刚</span></div>
-          <svg className="connections" viewBox="0 0 900 470" preserveAspectRatio="none"><path d="M195 230 C245 230 240 190 290 190"/><path d="M475 190 C525 190 510 230 560 230"/><path d="M745 230 C795 230 780 185 830 185"/></svg>
-          {project.nodes.map(node => <button key={node.id} aria-label={node.title} className={`story-node ${selectedId === node.id ? "selected" : ""}`} style={{ left: node.position.x, top: node.position.y, "--node-color": nodeColor[node.kind] } as React.CSSProperties} onClick={() => setSelectedId(node.id)} draggable onDragEnd={event => { const bounds=event.currentTarget.parentElement?.getBoundingClientRect(); if(bounds) moveNode(node.id, Math.max(10,event.clientX-bounds.left-90), Math.max(45,event.clientY-bounds.top-45)); }}>
-            <span className="node-type">{node.kind === "scene" ? "视频场景" : node.kind === "choice" ? "玩家选择" : node.kind === "ending" ? "故事结局" : "故事入口"}</span>
-            <strong>{node.title}</strong><small>{node.kind === "choice" ? `${node.choices.length} 个选项` : node.kind === "scene" ? node.dialogue : node.kind === "ending" ? node.endingTitle : "自动进入下一段"}</small>
+          <div className="canvas-meta"><span>剧情图 · {project.nodes.length} 个节点</span><span>自动保存：{savedAt}</span></div>
+          <DynamicEdges project={project}/>
+          {project.nodes.map(node => <button key={node.id} aria-label={node.title} className={`story-node ${selectedId === node.id ? "selected" : ""}`} style={{ left: node.position.x, top: node.position.y, "--node-color": colors[node.kind] } as React.CSSProperties} onClick={() => setSelectedId(node.id)} draggable onDragEnd={event => { const bounds = event.currentTarget.parentElement?.getBoundingClientRect(); if (bounds) moveNode(node.id, Math.max(10, event.clientX - bounds.left - 90), Math.max(45, event.clientY - bounds.top - 45)); }}>
+            <span className="node-type">{labels[node.kind]}</span><strong>{node.title}</strong><small>{nodeSummary(node)}</small>
           </button>)}
-          <PreviewDock node={previewNode} state={runtimeState} accent={project.ui.accent} onAdvance={nextPreview} onChoose={choose} onRestart={restart}/>
+          <PreviewDock project={project} node={previewNode} state={runtimeState} onAdvance={() => setRuntimeState(runtime.advance())} onChoose={port => setRuntimeState(runtime.choose(port))} onRestart={() => restart(false)} onExpand={() => setShowPlayer(true)}/>
         </div>
-        <div className="timeline">
-          <div className="track-labels"><b>演出时间线</b><span>画面</span><span>字幕 / 对白</span><span>音乐 / 音效</span><span>互动</span></div>
-          <div className="tracks"><div className="ruler">00:00　　　00:05　　　00:10　　　00:15</div><div className="clip video">雨夜码头.mp4</div><div className="clip dialogue">“那封信，真的来自他吗？”</div><div className="clip audio">雨声环境 + 悬疑配乐</div><div className="clip choice">显示选项</div></div>
-        </div>
+        <Timeline selected={selected}/>
       </section>
-      <aside className="inspector"><div className="inspector-title"><Settings2 size={16}/> 属性检查器</div><div className="form">
-        <label>节点名称<input aria-label="节点名称" value={selected.title} onChange={event => updateSelected({ title: event.target.value })}/></label>
-        {selected.kind === "choice" && <><label>画面提示<input value={selected.prompt} onChange={event => updateSelected({ prompt: event.target.value } as Partial<StoryNode>)}/></label>{selected.choices.map((choice, index) => <label key={choice.id}>选项 {index + 1}<input value={choice.label} onChange={event => updateSelected({ choices: selected.choices.map(item => item.id === choice.id ? { ...item, label: event.target.value } : item) } as Partial<StoryNode>)}/><small>连接到后续剧情节点</small></label>)}</>}
-        {selected.kind === "scene" && <><label>角色<input value={selected.speaker} onChange={event => updateSelected({ speaker: event.target.value } as Partial<StoryNode>)}/></label><label>对白<textarea value={selected.dialogue} onChange={event => updateSelected({ dialogue: event.target.value } as Partial<StoryNode>)}/></label></>}
-        <button className="danger-button" aria-label="删除选中节点" disabled={selected.kind === "start"} onClick={deleteSelected}><Trash2 size={14}/> 删除选中节点</button><div className="theme-section"><h3>游戏 UI</h3><label>强调色<input aria-label="强调色" type="color" value={project.ui.accent} onChange={event => setProject(current => ({ ...current, ui: { ...current.ui, accent: event.target.value } }))}/></label><label>对话框透明度<input type="range" min="0.3" max="1" step="0.05" value={project.ui.dialogueOpacity} onChange={event => setProject(current => ({ ...current, ui: { ...current.ui, dialogueOpacity: Number(event.target.value) } }))}/></label></div>
+
+      <aside className="inspector"><div className="inspector-title"><Settings2 size={16}/> 属性与连接</div><div className="form">
+        <Inspector project={project} selected={selected} updateSelected={updateSelected}/>
+        {outputPorts(selected).map(port => { const edge = project.edges.find(item => item.source === selected.id && item.sourcePort === port.value); return <div className="connection-row" key={port.value}><label>{port.label}<select aria-label={port.value === "next" ? "连接到" : `${port.label}连接到`} value={edge?.target ?? ""} onChange={event => event.target.value && connect(port.value, event.target.value)}><option value="">未连接</option>{project.nodes.filter(node => node.id !== selected.id).map(node => <option key={node.id} value={node.id}>{node.title}</option>)}</select></label>{edge && <><small>已连接到：{project.nodes.find(node => node.id === edge.target)?.title}</small><button className="icon-text" onClick={() => removeEdge(edge.id)}>断开</button></>}</div>; })}
+        <button className="danger-button" aria-label="删除选中节点" disabled={selected.kind === "start"} onClick={deleteSelected}><Trash2 size={14}/> 删除选中节点</button>
+        <div className="theme-section"><h3>游戏 UI</h3><label>强调色<input aria-label="强调色" type="color" value={project.ui.accent} onChange={event => updateProject(current => ({ ...current, ui: { ...current.ui, accent: event.target.value } }))}/></label><label>对话框透明度<input type="range" min="0.3" max="1" step="0.05" value={project.ui.dialogueOpacity} onChange={event => updateProject(current => ({ ...current, ui: { ...current.ui, dialogueOpacity: Number(event.target.value) } }))}/></label></div>
       </div></aside>
     </main>
-    <footer className="statusbar"><span className="healthy"><CheckCircle2 size={12}/> 项目正常</span><span>{project.nodes.length} 个节点</span><span>1 个结局</span><span>预计游玩 4 分钟</span><span className="top-spacer"/><span>撤销 Ctrl+Z</span></footer>
+    <footer className="statusbar"><span className={issues.some(issue => issue.severity === "error") ? "unhealthy" : "healthy"}>{issues.length ? <AlertTriangle size={12}/> : <CheckCircle2 size={12}/>} {issues.length ? `${issues.length} 个问题` : "项目正常"}</span><span>{project.nodes.length} 个节点</span><span>{project.assets.length} 个素材</span><span>{project.variables.length} 个变量</span><span className="top-spacer"/><span>拖动节点可调整位置</span></footer>
+    {showDiagnostics && <Modal title="项目检查" onClose={() => setShowDiagnostics(false)}><div className="issue-list">{issues.length ? issues.map((issue, index) => <button key={`${issue.code}-${index}`} onClick={() => { if (issue.nodeId) setSelectedId(issue.nodeId); setShowDiagnostics(false); }}><b>{issue.severity === "error" ? "错误" : "警告"}</b><span>{issue.message}</span></button>) : <div className="empty-state"><CheckCircle2 size={32}/><h3>项目可以发布</h3><p>没有发现剧情连接问题。</p></div>}</div></Modal>}
+    {showPlayer && <Modal wide title="独立试玩" onClose={() => setShowPlayer(false)}><div className="full-player"><PreviewDock project={project} node={previewNode} state={runtimeState} onAdvance={() => setRuntimeState(runtime.advance())} onChoose={port => setRuntimeState(runtime.choose(port))} onRestart={() => restart(false)}/><aside><h3>运行状态</h3>{Object.entries(runtimeState.variables).map(([key, value]) => <p key={key}>{project.variables.find(item => item.id === key)?.name ?? key}<b>{String(value)}</b></p>)}<button onClick={() => restart(false)}><RotateCcw size={14}/> 从头开始</button></aside></div></Modal>}
   </div>;
 }
 
-function LibraryGroup({ title, items, onAdd }: { title: string; items: Array<[StoryNode["kind"], string]>; onAdd(kind: StoryNode["kind"]): void }) { return <section className="library-group"><h3>{title}</h3>{items.map(([kind,label]) => <button key={label} onClick={() => onAdd(kind)}><i style={{ background: nodeColor[kind] }}/>{label}</button>)}</section>; }
+function NodeLibrary({ onAdd }: { onAdd(kind: Exclude<NodeKind, "start">): void }) { return <><label className="search"><Search size={14}/><input aria-label="搜索节点" placeholder="搜索节点类型"/></label><section className="library-group"><h3>叙事</h3><LibraryButton kind="scene" onAdd={onAdd}/><LibraryButton kind="choice" onAdd={onAdd}/></section><section className="library-group"><h3>逻辑</h3><LibraryButton kind="condition" onAdd={onAdd}/><LibraryButton kind="setVariable" onAdd={onAdd}/><LibraryButton kind="ending" onAdd={onAdd}/></section><button className="add-node" onClick={() => onAdd("choice")}><Plus size={15}/> 添加玩家选择</button></>; }
+function LibraryButton({ kind, onAdd }: { kind: Exclude<NodeKind, "start">; onAdd(kind: Exclude<NodeKind, "start">): void }) { return <button onClick={() => onAdd(kind)}><i style={{ background: colors[kind] }}/>{labels[kind]}</button>; }
+function AssetLibrary({ project, onImport, onRemove }: { project: Project; onImport(file?: File): void; onRemove(id: string): void }) { return <div className="side-panel"><label className="upload-button"><Upload size={15}/> 导入素材<input aria-label="导入素材" hidden type="file" accept="video/*,audio/*,image/*" onChange={event => onImport(event.target.files?.[0])}/></label>{project.assets.map(asset => <div className="asset-row" key={asset.id}><div><b>{asset.name}</b><small>{asset.type || "未知类型"} · {(asset.size / 1024 / 1024).toFixed(1)} MB</small></div><button aria-label={`删除素材 ${asset.name}`} onClick={() => onRemove(asset.id)}><Trash2 size={14}/></button></div>)}{!project.assets.length && <p className="panel-hint">导入视频、图片、音乐或音效，再在场景节点中选择使用。</p>}</div>; }
+function ProjectPanel({ project, onTitle, onExport, onImport, onAddVariable }: { project: Project; onTitle(value: string): void; onExport(): void; onImport(): void; onAddVariable(): void }) { return <div className="side-panel"><label>项目名称<input value={project.title} onChange={event => onTitle(event.target.value)}/></label><button className="panel-command" onClick={onExport}><FileJson size={15}/> 导出项目文件</button><button className="panel-command" onClick={onImport}><Upload size={15}/> 导入项目文件</button><h3>变量</h3>{project.variables.map(variable => <div className="variable-row" key={variable.id}><span>{variable.name}</span><b>{String(variable.initialValue)}</b></div>)}<button className="panel-command" onClick={onAddVariable}><Plus size={15}/> 新建变量</button></div>; }
 
-function PreviewDock({ node, state, accent, onAdvance, onChoose, onRestart }: { node?: StoryNode; state: RuntimeSnapshot; accent: string; onAdvance(): void; onChoose(id: string): void; onRestart(): void }) {
-  return <section className="preview-dock" style={{ "--accent": accent } as React.CSSProperties}><header><b>实时预览</b><span>桌面 16:9</span><Maximize2 size={14}/></header><div className="preview-stage">
-    {node?.kind === "scene" && <div className="dialogue-box"><b>{node.speaker}</b><p>{node.dialogue}</p><button aria-label="继续剧情" onClick={onAdvance}>继续</button></div>}
-    {node?.kind === "choice" && <div className="choice-screen"><p>{node.prompt}</p>{node.choices.map(choice => <button key={choice.id} onClick={() => onChoose(choice.id)}>{choice.label}</button>)}</div>}
-    {node?.kind === "ending" && <div className="ending-screen"><small>结局达成</small><h2>{node.endingTitle}</h2><button onClick={onRestart}><RotateCcw size={14}/> 重新试玩</button></div>}
-    {state.status === "error" && <div className="ending-screen"><AlertTriangle/><h2>剧情连接异常</h2></div>}
-  </div><footer><Play size={13}/><span>{state.status === "ended" ? "播放结束" : "00:08 / 00:24"}</span><span className="top-spacer"/>从选中节点同步</footer></section>;
+function Inspector({ project, selected, updateSelected }: { project: Project; selected: StoryNode; updateSelected(patch: Partial<StoryNode>): void }) { return <><label>节点名称<input aria-label="节点名称" value={selected.title} onChange={event => updateSelected({ title: event.target.value })}/></label>{selected.kind === "scene" && <><label>素材<select aria-label="场景素材" value={selected.assetId ?? ""} onChange={event => { const asset = project.assets.find(item => item.id === event.target.value); updateSelected({ assetId: asset?.id, mediaUrl: asset?.url ?? "" } as Partial<StoryNode>); }}><option value="">无素材</option>{project.assets.map(asset => <option key={asset.id} value={asset.id}>{asset.name}</option>)}</select></label><label>角色<input value={selected.speaker} onChange={event => updateSelected({ speaker: event.target.value } as Partial<StoryNode>)}/></label><label>对白<textarea value={selected.dialogue} onChange={event => updateSelected({ dialogue: event.target.value } as Partial<StoryNode>)}/></label></>}{selected.kind === "choice" && <><label>画面提示<input value={selected.prompt} onChange={event => updateSelected({ prompt: event.target.value } as Partial<StoryNode>)}/></label>{selected.choices.map((choice, index) => <label key={choice.id}>选项 {index + 1}<input value={choice.label} onChange={event => updateSelected({ choices: selected.choices.map(item => item.id === choice.id ? { ...item, label: event.target.value } : item) } as Partial<StoryNode>)}/></label>)}</>}{(selected.kind === "condition" || selected.kind === "setVariable") && <label>变量<select value={selected.variableId} onChange={event => updateSelected({ variableId: event.target.value } as Partial<StoryNode>)}>{project.variables.map(variable => <option key={variable.id} value={variable.id}>{variable.name}</option>)}</select></label>}{selected.kind === "condition" && <><label>比较方式<select value={selected.operator} onChange={event => updateSelected({ operator: event.target.value as "eq"|"gte"|"lte" } as Partial<StoryNode>)}><option value="gte">大于等于</option><option value="lte">小于等于</option><option value="eq">等于</option></select></label><label>比较值<input type="number" value={Number(selected.value)} onChange={event => updateSelected({ value: Number(event.target.value) } as Partial<StoryNode>)}/></label></>}{selected.kind === "setVariable" && <><label>操作<select value={selected.operation} onChange={event => updateSelected({ operation: event.target.value as "set"|"add" } as Partial<StoryNode>)}><option value="add">增加</option><option value="set">设为</option></select></label><label>数值<input type="number" value={Number(selected.value)} onChange={event => updateSelected({ value: Number(event.target.value) } as Partial<StoryNode>)}/></label></>}{selected.kind === "ending" && <label>结局标题<input value={selected.endingTitle} onChange={event => updateSelected({ endingTitle: event.target.value } as Partial<StoryNode>)}/></label>}</>; }
+
+function DynamicEdges({ project }: { project: Project }) { return <svg className="connections">{project.edges.map(edge => { const source = project.nodes.find(node => node.id === edge.source); const target = project.nodes.find(node => node.id === edge.target); if (!source || !target) return null; const x1 = source.position.x + 185, y1 = source.position.y + 48, x2 = target.position.x, y2 = target.position.y + 48; return <path key={edge.id} d={`M ${x1} ${y1} C ${x1 + 55} ${y1}, ${x2 - 55} ${y2}, ${x2} ${y2}`}/>; })}</svg>; }
+function Timeline({ selected }: { selected: StoryNode }) { return <div className="timeline"><div className="track-labels"><b>演出时间线</b><span>画面</span><span>字幕 / 对白</span><span>音乐 / 音效</span><span>互动</span></div><div className="tracks"><div className="ruler">00:00　　　00:05　　　00:10　　　00:15</div><div className="clip video">{selected.kind === "scene" ? selected.title : "选择场景节点编辑演出"}</div><div className="clip dialogue">{selected.kind === "scene" ? selected.dialogue : "字幕轨道"}</div><div className="clip audio">环境音与配乐轨道</div><div className="clip choice">{selected.kind === "choice" ? "显示选项" : "互动轨道"}</div></div></div>; }
+function PreviewDock({ project, node, state, onAdvance, onChoose, onRestart, onExpand }: { project: Project; node?: StoryNode; state: RuntimeSnapshot; onAdvance(): void; onChoose(port: string): void; onRestart(): void; onExpand?: () => void }) { const asset = node?.kind === "scene" ? project.assets.find(item => item.id === node.assetId) : undefined; return <section className="preview-dock" style={{ "--accent": project.ui.accent, "--dialogue-opacity": project.ui.dialogueOpacity, "--button-radius": `${project.ui.buttonRadius}px` } as React.CSSProperties}><header><b>实时预览</b><span>16:9</span>{onExpand && <button aria-label="展开试玩" onClick={onExpand}><Maximize2 size={14}/></button>}</header><div className="preview-stage">{asset?.type.startsWith("image/") && <img src={asset.url} alt="场景"/>}{asset?.type.startsWith("video/") && <video src={asset.url} autoPlay muted loop/>}{node?.kind === "scene" && <div className="dialogue-box"><b>{node.speaker}</b><p>{node.dialogue}</p><button aria-label="继续剧情" onClick={onAdvance}>继续</button></div>}{node?.kind === "choice" && <div className="choice-screen"><p>{node.prompt}</p>{node.choices.map(choice => <button key={choice.id} onClick={() => onChoose(choice.id)}>{choice.label}</button>)}</div>}{node?.kind === "ending" && <div className="ending-screen"><small>结局达成</small><h2>{node.endingTitle}</h2><button onClick={onRestart}><RotateCcw size={14}/> 重新试玩</button></div>}{state.status === "error" && <div className="ending-screen"><AlertTriangle/><h2>剧情连接异常</h2><p>请检查当前节点的出口。</p></div>}</div><footer><Play size={13}/><span>{state.status === "ended" ? "播放结束" : labels[node?.kind ?? "start"]}</span><span className="top-spacer"/>已访问 {state.visitedNodeIds.length} 个节点</footer></section>; }
+function Modal({ title, onClose, wide, children }: { title: string; onClose(): void; wide?: boolean; children: React.ReactNode }) { return <div className="modal-backdrop"><section className={`modal ${wide ? "wide" : ""}`}><header><h2>{title}</h2><button aria-label="关闭" onClick={onClose}><X size={18}/></button></header><div className="modal-body">{children}</div></section></div>; }
+function nodeSummary(node: StoryNode) { if (node.kind === "scene") return node.dialogue; if (node.kind === "choice") return `${node.choices.length} 个选项`; if (node.kind === "condition") return `当变量 ${node.operator} ${String(node.value)}`; if (node.kind === "setVariable") return `${node.operation === "add" ? "增加" : "设为"} ${String(node.value)}`; if (node.kind === "ending") return node.endingTitle; return "自动进入下一步"; }
+
+function createPlayableHtml(project: Project) {
+  const data = JSON.stringify(project).replace(/</g, "\\u003c");
+  return `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${project.title}</title><style>html,body,#app{margin:0;width:100%;height:100%;background:#080a0d;color:#fff;font-family:system-ui,"Microsoft YaHei"}#app{display:grid;place-items:center}.stage{width:min(100vw,1200px);aspect-ratio:16/9;position:relative;background:#18212a center/cover no-repeat;overflow:hidden}.stage video,.stage img{width:100%;height:100%;object-fit:cover}.dialog{position:absolute;left:6%;right:6%;bottom:6%;padding:18px;background:rgba(5,7,9,.86);border-left:4px solid ${project.ui.accent}}button{display:block;width:min(80%,520px);margin:10px auto;padding:14px;border:1px solid ${project.ui.accent};border-radius:${project.ui.buttonRadius}px;background:#111b;color:#fff}.ending{text-align:center;margin-top:25%}</style><div id="app"></div><script>const project=${data};let vars=Object.fromEntries(project.variables.map(v=>[v.id,v.initialValue]));const app=document.querySelector('#app');const node=id=>project.nodes.find(n=>n.id===id);const next=(id,p)=>project.edges.find(e=>e.source===id&&e.sourcePort===p)?.target;function go(id){const n=node(id);if(!n)return app.innerHTML='<h2>剧情连接异常</h2>';if(n.kind==='start')return go(next(n.id,'next'));if(n.kind==='setVariable'){vars[n.variableId]=n.operation==='add'?Number(vars[n.variableId]||0)+Number(n.value):n.value;return go(next(n.id,'next'))}if(n.kind==='condition'){const l=vars[n.variableId]||0,ok=n.operator==='eq'?l===n.value:n.operator==='gte'?Number(l)>=Number(n.value):Number(l)<=Number(n.value);return go(next(n.id,ok?'true':'false'))}const asset=n.assetId&&project.assets.find(a=>a.id===n.assetId);let media=asset?(asset.type.startsWith('video/')?'<video autoplay muted loop src="'+asset.url+'"></video>':'<img src="'+asset.url+'">'):'';if(n.kind==='scene')app.innerHTML='<div class="stage">'+media+'<div class="dialog"><b>'+n.speaker+'</b><p>'+n.dialogue+'</p><button id="next">继续</button></div></div>',document.querySelector('#next').onclick=()=>go(next(n.id,'next'));if(n.kind==='choice'){app.innerHTML='<div class="stage"><div class="dialog"><p>'+n.prompt+'</p>'+n.choices.map(c=>'<button data-port="'+c.id+'">'+c.label+'</button>').join('')+'</div></div>';document.querySelectorAll('[data-port]').forEach(b=>b.onclick=()=>go(next(n.id,b.dataset.port)))}if(n.kind==='ending')app.innerHTML='<div class="stage"><div class="ending"><small>结局达成</small><h1>'+n.endingTitle+'</h1><button id="restart">重新开始</button></div></div>',document.querySelector('#restart').onclick=start}function start(){vars=Object.fromEntries(project.variables.map(v=>[v.id,v.initialValue]));go(project.nodes.find(n=>n.kind==='start').id)}start();<\/script></html>`;
 }

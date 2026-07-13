@@ -37,4 +37,20 @@ describe("editor workbench", () => {
     await userEvent.click(screen.getByRole("button", { name: "保存项目" }));
     expect(localStorage.getItem("flowfilm-project")).toContain("保存后的选择");
   });
+
+  it("creates a scene and connects the selected node", async () => {
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: "视频场景" }));
+    expect(screen.getByRole("button", { name: "新场景" })).toBeVisible();
+    await userEvent.selectOptions(screen.getByLabelText("连接到"), "ending");
+    expect(screen.getByText("已连接到：黎明之前")).toBeVisible();
+  });
+
+  it("switches to assets and registers an uploaded file", async () => {
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: "素材" }));
+    const input = screen.getByLabelText("导入素材");
+    await userEvent.upload(input, new File(["video"], "scene.mp4", { type: "video/mp4" }));
+    expect(screen.getByText("scene.mp4")).toBeVisible();
+  });
 });
