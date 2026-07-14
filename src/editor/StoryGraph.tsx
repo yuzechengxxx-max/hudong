@@ -19,7 +19,7 @@ const StoryNodeView = memo(function StoryNodeView({ data, selected }: NodeProps<
   return <div className={`graph-node ${selected ? "selected" : ""} ${data.asset ? "has-media" : ""}`} style={{ "--node-color": colors[story.kind], minHeight: Math.max(104 + mediaOffset, 70 + handles.length * 25) } as React.CSSProperties}>
     <Handle type="target" position={Position.Left} id="input" className="graph-handle input"/>
     <div className="graph-node-body" aria-label={story.title} role="button" tabIndex={0}><span>{labels[story.kind]}</span><strong>{story.title}</strong><small>{summary(story)}</small></div>
-    {story.kind === "scene" && data.asset && <div className="graph-node-media">{data.asset.type.startsWith("image/") ? <img src={data.asset.url} alt={data.asset.name}/> : data.asset.type.startsWith("video/") ? <video src={data.asset.url} aria-label={data.asset.name} muted preload="metadata"/> : <span>{data.asset.name}</span>}</div>}
+    {story.kind === "scene" && data.asset && <div className="graph-node-media">{data.asset.type.startsWith("image/") ? <img className="contain-media" src={data.asset.url} alt={data.asset.name}/> : data.asset.type.startsWith("video/") ? <video className="contain-media" src={data.asset.url} aria-label={data.asset.name} muted preload="metadata"/> : <span>{data.asset.name}</span>}</div>}
     {handles.map(handle => <div className="output-row" key={handle.id} style={{ top: handle.top }}><em>{handle.label}</em><Handle type="source" position={Position.Right} id={handle.id} className="graph-handle output"/></div>)}
   </div>;
 });

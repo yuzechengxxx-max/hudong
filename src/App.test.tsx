@@ -200,6 +200,33 @@ describe("editor workbench", () => {
     expect(screen.getByText("已保存 · 刚刚")).toBeVisible();
   });
 
+  it("exposes save state on the save control", async () => {
+    render(<App />);
+    const save = screen.getByRole("button", { name: "保存项目" });
+    await userEvent.click(save);
+    expect(save).toHaveAttribute("data-state", "saved");
+    expect(save).toHaveTextContent("已保存");
+  });
+
+  it("edits project display and UI settings from the settings drawer", async () => {
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: "项目设置" }));
+    await userEvent.selectOptions(screen.getByLabelText("画面比例"), "21:9");
+    const width = screen.getByLabelText("输出宽度");
+    await userEvent.clear(width);
+    await userEvent.type(width, "2560");
+    expect(width).toHaveValue(2560);
+    expect(screen.getByText("浅色与跟随系统主题将在后续版本提供")).toBeVisible();
+    expect(screen.getByTestId("preview-stage")).toHaveStyle({ aspectRatio: "21 / 9" });
+  });
+
+  it("renders media previews as complete thumbnails", async () => {
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: "素材" }));
+    await userEvent.upload(screen.getByLabelText("导入素材"), new File(["image"], "wide-scene.png", { type: "image/png" }));
+    expect(await screen.findByRole("img", { name: "wide-scene.png" })).toHaveClass("contain-media");
+  });
+
   it("provides a real graph canvas and resizable work areas", () => {
     const { container } = render(<App />);
     expect(screen.getByTestId("story-graph")).toBeVisible();

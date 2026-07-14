@@ -29,8 +29,7 @@ describe("ProjectSchema", () => {
   });
 
   it("adds default display settings to older projects", () => {
-    const legacy = createStarterProject() as ReturnType<typeof createStarterProject> & { display?: unknown };
-    delete legacy.display;
+    const { display: _display, ...legacy } = createStarterProject();
     expect(ProjectSchema.parse(legacy).display).toEqual({ aspectRatio: "16:9", width: 1920, height: 1080 });
   });
 
