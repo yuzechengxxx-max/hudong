@@ -73,6 +73,20 @@ describe("editor workbench", () => {
     expect(screen.getByPlaceholderText("搜索素材")).toBeVisible();
   });
 
+  it("drags an asset onto a scene node and shows its thumbnail", async () => {
+    const { container } = render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: "素材" }));
+    await userEvent.upload(screen.getByLabelText("导入素材"), new File(["image"], "scene-art.png", { type: "image/png" }));
+    const assetCard = (await screen.findByRole("img", { name: "scene-art.png" })).closest(".asset-card");
+    const data = new Map<string, string>();
+    const dataTransfer = { setData: (type: string, value: string) => data.set(type, value), getData: (type: string) => data.get(type) ?? "", types: ["application/x-flowfilm-asset"] };
+    fireEvent.dragStart(assetCard!, { dataTransfer });
+    const sceneNode = container.querySelector('[data-testid="rf__node-opening"]');
+    fireEvent.dragOver(sceneNode!, { dataTransfer });
+    fireEvent.drop(sceneNode!, { dataTransfer, clientX: 360, clientY: 220 });
+    expect(sceneNode?.querySelector('img[alt="scene-art.png"]')).toBeVisible();
+  });
+
   it("clears node selection when the blank canvas is clicked", async () => {
     const { container } = render(<App />);
     expect(screen.getByLabelText("节点名称")).toBeVisible();
@@ -80,6 +94,19 @@ describe("editor workbench", () => {
     expect(pane).toBeInTheDocument();
     fireEvent.click(pane!);
     expect(screen.getByText("未选择节点")).toBeVisible();
+  });
+
+  it("does not clear a selection when a marquee drag ends on the pane", () => {
+    const { container } = render(<App />);
+    const pane = container.querySelector(".react-flow__pane");
+    expect(pane).toBeInTheDocument();
+    fireEvent.mouseDown(pane!, { clientX: 120, clientY: 120 });
+    fireEvent.mouseMove(pane!, { clientX: 260, clientY: 240 });
+    fireEvent.mouseUp(pane!, { clientX: 260, clientY: 240 });
+    fireEvent.click(screen.getByRole("button", { name: "黎明之前" }));
+    fireEvent.click(pane!);
+    expect(container.querySelectorAll(".react-flow__node.selected")).toHaveLength(1);
+    expect(screen.getByLabelText("节点名称")).toHaveValue("黎明之前");
   });
 
   it("opens assets and project tools as temporary drawers", async () => {
@@ -139,14 +166,20 @@ describe("editor workbench", () => {
     expect(screen.getByRole("button", { name: "要不要赴约？ 副本" })).toBeVisible();
   });
 
-  it("exposes undo and redo as visible editor commands", () => {
+  it("keeps undo and redo on shortcuts without toolbar buttons", () => {
     render(<App />);
-    expect(screen.getByRole("button", { name: "撤销" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "重做" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "撤销" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重做" })).not.toBeInTheDocument();
     fireEvent.keyDown(window, { key: "d", ctrlKey: true });
-    expect(screen.getByRole("button", { name: "撤销" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "撤销" }));
-    expect(screen.getByRole("button", { name: "重做" })).toBeEnabled();
+    fireEvent.keyDown(window, { key: "z", ctrlKey: true });
+    fireEvent.keyDown(window, { key: "y", ctrlKey: true });
+    expect(screen.getByRole("button", { name: "要不要赴约？ 副本" })).toBeVisible();
+  });
+
+  it("shows a clear status after a manual save", async () => {
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: "保存项目" }));
+    expect(screen.getByText("已保存 · 刚刚")).toBeVisible();
   });
 
   it("provides a real graph canvas and resizable work areas", () => {

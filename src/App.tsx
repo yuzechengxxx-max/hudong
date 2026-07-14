@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Download, FileJson, Film, Image as ImageIcon, Maximize2, Minus, Music, Play, Plus, Redo2, RotateCcw, Save, Search, Trash2, Undo2, Upload, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Download, FileJson, Film, Image as ImageIcon, Maximize2, Minus, Music, Play, Plus, RotateCcw, Save, Search, Trash2, Upload, X } from "lucide-react";
 import { diagnoseProject } from "./core/diagnostics";
 import { createNode, createStarterProject, ProjectSchema, type NodeKind, type Project, type StoryNode } from "./core/project";
 import { createRuntime, type RuntimeSnapshot } from "./core/runtime";
@@ -24,6 +24,7 @@ export function App() {
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [showPlayer, setShowPlayer] = useState(false);
   const [savedAt, setSavedAt] = useState("尚未保存");
+  const [saveStatus, setSaveStatus] = useState<"dirty" | "saving" | "saved" | "error">("dirty");
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [leftWidth, setLeftWidth] = useState(() => Number(localStorage.getItem("flowfilm-left-width")) || 230);
   const [rightWidth, setRightWidth] = useState(() => Number(localStorage.getItem("flowfilm-right-width")) || 330);
@@ -42,7 +43,8 @@ export function App() {
   const previewNode = project.nodes.find(node => node.id === runtimeState.currentNodeId);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => { localStorage.setItem("flowfilm-project", JSON.stringify(project)); setSavedAt(new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })); }, 350);
+    setSaveStatus("saving");
+    const timer = window.setTimeout(() => { try { localStorage.setItem("flowfilm-project", JSON.stringify(project)); setSavedAt(new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })); setSaveStatus("saved"); } catch { setSaveStatus("error"); } }, 350);
     return () => window.clearTimeout(timer);
   }, [project]);
   useEffect(() => { localStorage.setItem("flowfilm-left-width", String(leftWidth)); localStorage.setItem("flowfilm-right-width", String(rightWidth)); localStorage.setItem("flowfilm-timeline-height", String(timelineHeight)); }, [leftWidth, rightWidth, timelineHeight]);
@@ -77,6 +79,19 @@ export function App() {
   function addNode(kind: Exclude<NodeKind, "start">, position?: { x: number; y: number }) { const created = createNode(kind, project.nodes.length); const node = position ? { ...created, position } : created; updateProject(current => ({ ...current, nodes: [...current.nodes, node] })); setSelectedIds([node.id]); setTab("nodes"); }
   function deleteSelected() { if (!selectedIds.some(id => project.nodes.find(node => node.id === id)?.kind !== "start")) return; updateProject(current => removeSelection(current, selectedIds)); setSelectedIds([]); }
   function moveNode(id: string, x: number, y: number) { updateProject(current => ({ ...current, nodes: current.nodes.map(node => node.id === id ? { ...node, position: { x, y } } : node) })); }
+  function attachAsset(assetId: string, targetNodeId: string | undefined, x: number, y: number) {
+    const asset = project.assets.find(item => item.id === assetId);
+    if (!asset) return;
+    if (targetNodeId) {
+      updateProject(current => ({ ...current, nodes: current.nodes.map(node => node.id === targetNodeId && node.kind === "scene" ? { ...node, assetId: asset.id, mediaUrl: asset.url } : node) }));
+      setSelectedIds([targetNodeId]);
+      return;
+    }
+    const created = createNode("scene", project.nodes.length);
+    const node = { ...created, title: asset.name.replace(/\.[^.]+$/, ""), position: { x, y }, assetId: asset.id, mediaUrl: asset.url };
+    updateProject(current => ({ ...current, nodes: [...current.nodes, node] }));
+    setSelectedIds([node.id]);
+  }
 
   function outputPorts(node: StoryNode) {
     if (node.kind === "choice") return node.choices.map(choice => ({ value: choice.id, label: choice.label }));
@@ -141,7 +156,7 @@ export function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   });
 
-  function saveProject() { localStorage.setItem("flowfilm-project", JSON.stringify(project)); setSavedAt("刚刚"); }
+  function saveProject() { try { localStorage.setItem("flowfilm-project", JSON.stringify(project)); setSavedAt("刚刚"); setSaveStatus("saved"); } catch { setSaveStatus("error"); } }
   function restart(fromSelected = false) { const next = createRuntime(project); setRuntime(next); setRuntimeState(next.start(fromSelected ? selectedId : undefined)); }
   function download(name: string, content: string, type: string) { const url = URL.createObjectURL(new Blob([content], { type })); const link = document.createElement("a"); link.href = url; link.download = name; link.click(); URL.revokeObjectURL(url); }
   function exportProject() { download(`${project.title}.flowfilm.json`, JSON.stringify(project, null, 2), "application/json;charset=utf-8"); }
@@ -159,8 +174,6 @@ export function App() {
   return <div className="app-shell">
     <header className="topbar">
       <div className="brand-mark">映流 <span>FlowFilm</span></div><div className="crumb">{project.title} / 主剧情</div><div className="top-spacer" />
-      <button className="toolbar-button icon-command" aria-label="撤销" title="撤销 (Ctrl+Z)" disabled={!pastRef.current.length} onClick={undo}><Undo2 size={15}/></button>
-      <button className="toolbar-button icon-command" aria-label="重做" title="重做 (Ctrl+Y)" disabled={!futureRef.current.length} onClick={redo}><Redo2 size={15}/></button>
       <button className="toolbar-button" aria-label="保存项目" onClick={saveProject}><Save size={15}/> 保存</button>
       <button className="toolbar-button" onClick={() => setDrawer(value => value === "assets" ? undefined : "assets")}><Upload size={15}/> 素材</button>
       <button className="toolbar-button" onClick={() => setDrawer(value => value === "project" ? undefined : "project")}><FileJson size={15}/> 项目</button>
@@ -171,7 +184,7 @@ export function App() {
 
     <main className="work-area no-library" style={{ gridTemplateColumns: `minmax(0,1fr) 5px ${rightWidth}px` }}>
       <section className="center-stack">
-        <StoryGraph project={project} selectedIds={selectedIds} onSelect={selectNodes} onMove={moveNode} onCreate={(kind, x, y) => addNode(kind, { x, y })} onConnect={connectGraph} onDeleteNodes={deleteGraphNodes} onDeleteEdges={deleteGraphEdges} overlay={<FloatingPreview><PreviewDock project={project} node={previewNode} state={runtimeState} onAdvance={() => setRuntimeState(runtime.advance())} onChoose={port => setRuntimeState(runtime.choose(port))} onRestart={() => restart(false)} onExpand={() => setShowPlayer(true)}/><div className="canvas-preview-actions"><button className="preview-command" onClick={() => restart(false)}><RotateCcw size={14}/> 从头预览</button><button className="preview-command" onClick={() => { restart(true); setShowPlayer(true); }}><Maximize2 size={14}/> 弹出试玩</button></div></FloatingPreview>}/>
+        <StoryGraph project={project} selectedIds={selectedIds} onSelect={selectNodes} onMove={moveNode} onCreate={(kind, x, y) => addNode(kind, { x, y })} onConnect={connectGraph} onDeleteNodes={deleteGraphNodes} onDeleteEdges={deleteGraphEdges} onAssetDrop={attachAsset} overlay={<FloatingPreview><PreviewDock project={project} node={previewNode} state={runtimeState} onAdvance={() => setRuntimeState(runtime.advance())} onChoose={port => setRuntimeState(runtime.choose(port))} onRestart={() => restart(false)} onExpand={() => setShowPlayer(true)}/><div className="canvas-preview-actions"><button className="preview-command" onClick={() => restart(false)}><RotateCcw size={14}/> 从头预览</button><button className="preview-command" onClick={() => { restart(true); setShowPlayer(true); }}><Maximize2 size={14}/> 弹出试玩</button></div></FloatingPreview>}/>
         {timelineOpen ? <><ResizeHandle orientation="horizontal" onResize={delta => setTimelineHeight(value => Math.min(420, Math.max(110, value - delta)))}/><div data-testid="timeline-drawer" className="timeline-drawer" style={{ height: timelineHeight }}><Timeline selected={selected ?? project.nodes[0]}/></div></> : null}
       </section>
       <ResizeHandle orientation="vertical" onResize={delta => setRightWidth(value => Math.min(520, Math.max(260, value - delta)))}/>
@@ -184,7 +197,7 @@ export function App() {
       {drawer && <aside className="workspace-drawer" style={{ width: drawerWidth }}><header><b>{drawer === "assets" ? "素材" : "项目"}</b><button aria-label="关闭面板" onClick={() => setDrawer(undefined)}><X size={16}/></button></header>{drawer === "assets" ? <AssetLibrary project={project} onImport={importAsset} onRemove={id => updateProject(current => ({ ...current, assets: current.assets.filter(asset => asset.id !== id), nodes: current.nodes.map(node => node.kind === "scene" && node.assetId === id ? { ...node, assetId: undefined, mediaUrl: "" } : node) }))}/> : <ProjectPanel project={project} onTitle={title => updateProject(current => ({ ...current, title }))} onExport={exportProject} onImport={() => importRef.current?.click()} onAddVariable={() => updateProject(current => ({ ...current, variables: [...current.variables, { id: `var-${Date.now()}`, name: "新变量", type: "number", initialValue: 0 }] }))}/>}<div className="drawer-resize" role="separator" aria-label={drawer === "assets" ? "调整素材面板宽度" : "调整项目面板宽度"} onPointerDown={event => { drawerResizeRef.current = { x: event.clientX, width: drawerWidth }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!drawerResizeRef.current || !event.currentTarget.hasPointerCapture(event.pointerId)) return; setDrawerWidth(Math.min(620, Math.max(280, drawerResizeRef.current.width + event.clientX - drawerResizeRef.current.x))); }} onPointerUp={() => { drawerResizeRef.current = undefined; }}/></aside>}
       <input ref={importRef} hidden type="file" accept=".json,.flowfilm.json" onChange={event => importProject(event.target.files?.[0])}/>
     </main>
-    <footer className="statusbar"><span className={issues.some(issue => issue.severity === "error") ? "unhealthy" : "healthy"}>{issues.length ? <AlertTriangle size={12}/> : <CheckCircle2 size={12}/>} {issues.length ? `${issues.length} 个问题` : "项目正常"}</span><span>{project.nodes.length} 个节点</span><span>{project.assets.length} 个素材</span><span>{project.variables.length} 个变量</span><span className="top-spacer"/><button aria-label="演出时间线" className={timelineOpen ? "active" : ""} onClick={() => setTimelineOpen(value => !value)}>演出时间线</button><button onClick={() => { setLeftWidth(230); setRightWidth(330); setTimelineHeight(190); }}>恢复布局</button></footer>
+    <footer className="statusbar"><span className={issues.some(issue => issue.severity === "error") ? "unhealthy" : "healthy"}>{issues.length ? <AlertTriangle size={12}/> : <CheckCircle2 size={12}/>} {issues.length ? `${issues.length} 个问题` : "项目正常"}</span><span>{project.nodes.length} 个节点</span><span>{project.assets.length} 个素材</span><span>{project.variables.length} 个变量</span><span className={`save-state ${saveStatus}`}>{saveStatus === "saving" ? "保存中…" : saveStatus === "error" ? "保存失败" : saveStatus === "saved" ? `已保存 · ${savedAt}` : "有未保存修改"}</span><span className="top-spacer"/><button aria-label="演出时间线" className={timelineOpen ? "active" : ""} onClick={() => setTimelineOpen(value => !value)}>演出时间线</button><button onClick={() => { setLeftWidth(230); setRightWidth(330); setTimelineHeight(190); }}>恢复布局</button></footer>
     {showDiagnostics && <Modal title="项目检查" onClose={() => setShowDiagnostics(false)}><div className="issue-list">{issues.length ? issues.map((issue, index) => <button key={`${issue.code}-${index}`} onClick={() => { if (issue.nodeId) setSelectedIds([issue.nodeId]); setShowDiagnostics(false); }}><b>{issue.severity === "error" ? "错误" : "警告"}</b><span>{issue.message}</span></button>) : <div className="empty-state"><CheckCircle2 size={32}/><h3>项目可以发布</h3><p>没有发现剧情连接问题。</p></div>}</div></Modal>}
     {showPlayer && <Modal wide title="独立试玩" onClose={() => setShowPlayer(false)}><div className="full-player"><PreviewDock project={project} node={previewNode} state={runtimeState} onAdvance={() => setRuntimeState(runtime.advance())} onChoose={port => setRuntimeState(runtime.choose(port))} onRestart={() => restart(false)}/><aside><h3>运行状态</h3>{Object.entries(runtimeState.variables).map(([key, value]) => <p key={key}>{project.variables.find(item => item.id === key)?.name ?? key}<b>{String(value)}</b></p>)}<button onClick={() => restart(false)}><RotateCcw size={14}/> 从头开始</button></aside></div></Modal>}
   </div>;
@@ -196,7 +209,7 @@ function AssetLibrary({ project, onImport, onRemove }: { project: Project; onImp
   const [query, setQuery] = useState("");
   const [type, setType] = useState("all");
   const assets = project.assets.filter(asset => asset.name.toLowerCase().includes(query.toLowerCase()) && (type === "all" || asset.type.startsWith(`${type}/`)));
-  return <div className="side-panel asset-library"><div className="asset-tools"><label className="search"><Search size={14}/><input placeholder="搜索素材" value={query} onChange={event => setQuery(event.target.value)}/></label><select aria-label="素材类型" value={type} onChange={event => setType(event.target.value)}><option value="all">全部类型</option><option value="video">视频</option><option value="image">图片</option><option value="audio">音频</option></select></div><label className="upload-button"><Upload size={15}/> 导入素材<input aria-label="导入素材" hidden type="file" accept="video/*,audio/*,image/*" onChange={event => onImport(event.target.files?.[0])}/></label><div className="asset-grid">{assets.map(asset => <article className="asset-card" key={asset.id}><div className="asset-preview">{asset.url ? asset.type.startsWith("image/") ? <img src={asset.url} alt={asset.name}/> : asset.type.startsWith("video/") ? <video src={asset.url} aria-label={asset.name} muted/> : asset.type.startsWith("audio/") ? <Music aria-label={asset.name}/> : <ImageIcon aria-label={asset.name}/> : <div className="asset-loading" aria-label={`正在读取 ${asset.name}`}><ImageIcon/></div>}<span>{asset.type.startsWith("video/") ? <Film size={13}/> : asset.type.startsWith("image/") ? <ImageIcon size={13}/> : <Music size={13}/>}</span></div><div className="asset-meta"><b title={asset.name}>{asset.name}</b><small>{asset.type || "未知类型"} · {(asset.size / 1024 / 1024).toFixed(1)} MB</small></div><button aria-label={`删除素材 ${asset.name}`} onClick={() => onRemove(asset.id)}><Trash2 size={14}/></button></article>)}</div>{!assets.length && <p className="panel-hint">{project.assets.length ? "没有符合筛选条件的素材。" : "导入视频、图片、音乐或音效，再在场景节点中选择使用。"}</p>}</div>;
+  return <div className="side-panel asset-library"><div className="asset-tools"><label className="search"><Search size={14}/><input placeholder="搜索素材" value={query} onChange={event => setQuery(event.target.value)}/></label><select aria-label="素材类型" value={type} onChange={event => setType(event.target.value)}><option value="all">全部类型</option><option value="video">视频</option><option value="image">图片</option><option value="audio">音频</option></select></div><label className="upload-button"><Upload size={15}/> 导入素材<input aria-label="导入素材" hidden type="file" accept="video/*,audio/*,image/*" onChange={event => onImport(event.target.files?.[0])}/></label><div className="asset-grid">{assets.map(asset => <article className="asset-card" draggable onDragStart={event => { event.dataTransfer.effectAllowed = "copy"; event.dataTransfer.setData("application/x-flowfilm-asset", asset.id); }} key={asset.id}><div className="asset-preview">{asset.url ? asset.type.startsWith("image/") ? <img src={asset.url} alt={asset.name}/> : asset.type.startsWith("video/") ? <video src={asset.url} aria-label={asset.name} muted/> : asset.type.startsWith("audio/") ? <Music aria-label={asset.name}/> : <ImageIcon aria-label={asset.name}/> : <div className="asset-loading" aria-label={`正在读取 ${asset.name}`}><ImageIcon/></div>}<span>{asset.type.startsWith("video/") ? <Film size={13}/> : asset.type.startsWith("image/") ? <ImageIcon size={13}/> : <Music size={13}/>}</span></div><div className="asset-meta"><b title={asset.name}>{asset.name}</b><small>{asset.type || "未知类型"} · {(asset.size / 1024 / 1024).toFixed(1)} MB</small></div><button aria-label={`删除素材 ${asset.name}`} onClick={() => onRemove(asset.id)}><Trash2 size={14}/></button></article>)}</div>{!assets.length && <p className="panel-hint">{project.assets.length ? "没有符合筛选条件的素材。" : "导入视频、图片、音乐或音效，再在场景节点中选择使用。"}</p>}</div>;
 }
 function ProjectPanel({ project, onTitle, onExport, onImport, onAddVariable }: { project: Project; onTitle(value: string): void; onExport(): void; onImport(): void; onAddVariable(): void }) { return <div className="side-panel"><label>项目名称<input value={project.title} onChange={event => onTitle(event.target.value)}/></label><button className="panel-command" onClick={onExport}><FileJson size={15}/> 导出项目文件</button><button className="panel-command" onClick={onImport}><Upload size={15}/> 导入项目文件</button><h3>变量</h3>{project.variables.map(variable => <div className="variable-row" key={variable.id}><span>{variable.name}</span><b>{String(variable.initialValue)}</b></div>)}<button className="panel-command" onClick={onAddVariable}><Plus size={15}/> 新建变量</button></div>; }
 
@@ -205,6 +218,7 @@ function Inspector({ project, selected, updateSelected, onAddChoice, onMoveChoic
     <label>节点名称<input aria-label="节点名称" value={selected.title} onChange={event => updateSelected({ title: event.target.value })}/></label>
     {selected.kind === "scene" && <>
       <label>素材<select aria-label="场景素材" value={selected.assetId ?? ""} onChange={event => { const asset = project.assets.find(item => item.id === event.target.value); updateSelected({ assetId: asset?.id, mediaUrl: asset?.url ?? "" } as Partial<StoryNode>); }}><option value="">无素材</option>{project.assets.map(asset => <option key={asset.id} value={asset.id}>{asset.name}</option>)}</select></label>
+      {selected.assetId && (() => { const asset = project.assets.find(item => item.id === selected.assetId); return asset ? <div className="inspector-asset-preview">{asset.type.startsWith("image/") ? <img src={asset.url} alt={asset.name}/> : asset.type.startsWith("video/") ? <video src={asset.url} aria-label={asset.name} muted/> : <Music/>}<span><b>{asset.name}</b><small>{asset.type}</small></span></div> : null; })()}
       <label className="toggle-row"><input aria-label="显示对话框" type="checkbox" checked={selected.showDialogue} onChange={event => updateSelected({ showDialogue: event.target.checked } as Partial<StoryNode>)}/><span>显示对话框</span></label>
       {selected.showDialogue && <><label>角色<input aria-label="角色" value={selected.speaker} onChange={event => updateSelected({ speaker: event.target.value } as Partial<StoryNode>)}/></label><label>对白<textarea aria-label="对白" value={selected.dialogue} onChange={event => updateSelected({ dialogue: event.target.value } as Partial<StoryNode>)}/></label></>}
     </>}

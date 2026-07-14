@@ -5,14 +5,16 @@ import type { NodeKind, Project, StoryNode } from "../core/project";
 
 const colors: Record<StoryNode["kind"], string> = { start: "#83909c", scene: "#4b8fac", choice: "#d1a83d", condition: "#54a77b", setVariable: "#bd6d6d", ending: "#d46f48" };
 const labels: Record<StoryNode["kind"], string> = { start: "故事入口", scene: "视频场景", choice: "玩家选择", condition: "条件判断", setVariable: "修改变量", ending: "故事结局" };
-type GraphData = { story: StoryNode };
+type GraphData = { story: StoryNode; asset?: Project["assets"][number] };
 
 const StoryNodeView = memo(function StoryNodeView({ data, selected }: NodeProps<Node<GraphData>>) {
   const story = data.story;
-  const handles = story.kind === "choice" ? story.choices.map((choice, index) => ({ id: choice.id, label: choice.label, top: 68 + index * 25 })) : story.kind === "condition" ? [{ id: "true", label: "成立", top: 70 }, { id: "false", label: "不成立", top: 96 }] : story.kind === "ending" ? [] : [{ id: "next", label: "下一步", top: 72 }];
-  return <div className={`graph-node ${selected ? "selected" : ""}`} style={{ "--node-color": colors[story.kind], minHeight: Math.max(104, 70 + handles.length * 25) } as React.CSSProperties}>
+  const mediaOffset = story.kind === "scene" && data.asset ? 58 : 0;
+  const handles = story.kind === "choice" ? story.choices.map((choice, index) => ({ id: choice.id, label: choice.label, top: 68 + index * 25 })) : story.kind === "condition" ? [{ id: "true", label: "成立", top: 70 }, { id: "false", label: "不成立", top: 96 }] : story.kind === "ending" ? [] : [{ id: "next", label: "下一步", top: 72 + mediaOffset }];
+  return <div className={`graph-node ${selected ? "selected" : ""} ${data.asset ? "has-media" : ""}`} style={{ "--node-color": colors[story.kind], minHeight: Math.max(104 + mediaOffset, 70 + handles.length * 25) } as React.CSSProperties}>
     <Handle type="target" position={Position.Left} id="input" className="graph-handle input"/>
     <div className="graph-node-body" aria-label={story.title} role="button" tabIndex={0}><span>{labels[story.kind]}</span><strong>{story.title}</strong><small>{summary(story)}</small></div>
+    {story.kind === "scene" && data.asset && <div className="graph-node-media">{data.asset.type.startsWith("image/") ? <img src={data.asset.url} alt={data.asset.name}/> : data.asset.type.startsWith("video/") ? <video src={data.asset.url} aria-label={data.asset.name} muted preload="metadata"/> : <span>{data.asset.name}</span>}</div>}
     {handles.map(handle => <div className="output-row" key={handle.id} style={{ top: handle.top }}><em>{handle.label}</em><Handle type="source" position={Position.Right} id={handle.id} className="graph-handle output"/></div>)}
   </div>;
 });
@@ -29,6 +31,7 @@ type StoryGraphProps = {
   onConnect(source: string, port: string, target: string): void;
   onDeleteNodes(ids: string[]): void;
   onDeleteEdges(ids: string[]): void;
+  onAssetDrop(assetId: string, targetNodeId: string | undefined, x: number, y: number): void;
 };
 
 export function StoryGraph(props: StoryGraphProps) {
@@ -37,7 +40,7 @@ export function StoryGraph(props: StoryGraphProps) {
 
 function toNodes(project: Project, selectedIds: string[]): Node<GraphData>[] {
   const selected = new Set(selectedIds);
-  return project.nodes.map(story => ({ id: story.id, type: "story", position: story.position, selected: selected.has(story.id), data: { story } }));
+  return project.nodes.map(story => ({ id: story.id, type: "story", position: story.position, selected: selected.has(story.id), data: { story, asset: story.kind === "scene" ? project.assets.find(asset => asset.id === story.assetId) : undefined } }));
 }
 
 function toEdges(project: Project, selectedIds: string[]): Edge[] {
@@ -45,7 +48,7 @@ function toEdges(project: Project, selectedIds: string[]): Edge[] {
   return project.edges.map(edge => ({ id: edge.id, source: edge.source, target: edge.target, sourceHandle: edge.sourcePort, targetHandle: "input", type: "default", animated: selected.has(edge.source), style: { stroke: selected.has(edge.source) ? "#f0b429" : "#77818c", strokeWidth: 2 } }));
 }
 
-function GraphInner({ project, selectedIds, overlay, onSelect, onMove, onCreate, onConnect, onDeleteNodes, onDeleteEdges }: StoryGraphProps) {
+function GraphInner({ project, selectedIds, overlay, onSelect, onMove, onCreate, onConnect, onDeleteNodes, onDeleteEdges, onAssetDrop }: StoryGraphProps) {
   const api = useReactFlow();
   const [nodes, setNodes, applyNodeChanges] = useNodesState<Node<GraphData>>(toNodes(project, selectedIds));
   const [edges, setEdges, applyEdgeChanges] = useEdgesState(toEdges(project, selectedIds));
@@ -53,13 +56,14 @@ function GraphInner({ project, selectedIds, overlay, onSelect, onMove, onCreate,
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [edgeMenu, setEdgeMenu] = useState<{ id: string; x: number; y: number }>();
   const graphRef = useRef<HTMLDivElement>(null);
+  const paneGesture = useRef<{ x: number; y: number; moved: boolean } | undefined>(undefined);
 
   useEffect(() => {
     setNodes(current => toNodes(project, selectedIds).map(next => {
       const existing = current.find(node => node.id === next.id);
       return existing ? { ...next, position: existing.dragging ? existing.position : next.position, selected: next.selected } : next;
     }));
-  }, [project.nodes, selectedIds, setNodes]);
+  }, [project.nodes, project.assets, selectedIds, setNodes]);
 
   useEffect(() => { setEdges(toEdges(project, selectedIds)); }, [project.edges, selectedIds, setEdges]);
 
@@ -82,7 +86,30 @@ function GraphInner({ project, selectedIds, overlay, onSelect, onMove, onCreate,
 
   const isPaneEvent = (event: ReactMouseEvent<HTMLDivElement>) => (event.target as Element).classList.contains("react-flow__pane");
 
-  return <div ref={graphRef} className="story-graph" data-testid="story-graph" tabIndex={0} onKeyDownCapture={(event) => {
+  const startPaneGesture = (target: EventTarget, x: number, y: number) => {
+    if ((target as Element).classList.contains("react-flow__pane")) paneGesture.current = { x, y, moved: false };
+  };
+  const movePaneGesture = (x: number, y: number) => {
+    const gesture = paneGesture.current;
+    if (gesture && Math.hypot(x - gesture.x, y - gesture.y) > 4) gesture.moved = true;
+  };
+
+  return <div ref={graphRef} className="story-graph" data-testid="story-graph" tabIndex={0} onMouseDownCapture={(event) => startPaneGesture(event.target, event.clientX, event.clientY)} onMouseMoveCapture={(event) => movePaneGesture(event.clientX, event.clientY)} onPointerDownCapture={(event) => {
+    startPaneGesture(event.target, event.clientX, event.clientY);
+  }} onPointerMoveCapture={(event) => {
+    movePaneGesture(event.clientX, event.clientY);
+  }} onDragOver={(event) => {
+    if (event.dataTransfer.types.includes("application/x-flowfilm-asset")) event.preventDefault();
+  }} onDrop={(event) => {
+    const assetId = event.dataTransfer.getData("application/x-flowfilm-asset");
+    if (!assetId) return;
+    event.preventDefault();
+    const element = event.target as Element;
+    const nodeId = element.closest(".react-flow__node")?.getAttribute("data-id") ?? undefined;
+    const target = project.nodes.find(node => node.id === nodeId && node.kind === "scene")?.id;
+    const point = api.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    onAssetDrop(assetId, target, point.x, point.y);
+  }} onKeyDownCapture={(event) => {
     if ((event.key === "Delete" || event.key === "Backspace") && selectedEdgeIds.length) {
       event.preventDefault();
       onDeleteEdges(selectedEdgeIds);
@@ -90,6 +117,8 @@ function GraphInner({ project, selectedIds, overlay, onSelect, onMove, onCreate,
     }
   }} onClickCapture={(event) => {
     if (!isPaneEvent(event)) return;
+    if (paneGesture.current?.moved) { paneGesture.current = undefined; return; }
+    paneGesture.current = undefined;
     onSelect([]);
     setMenu(undefined);
     setEdgeMenu(undefined);
