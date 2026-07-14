@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { App, createPlayableHtml } from "./App";
 import { createStarterProject } from "./core/project";
+import { createLargeProject } from "./test/largeProject";
 
 describe("editor workbench", () => {
   async function createNodeFromCanvas(container: HTMLElement, name: string) {
@@ -236,6 +237,14 @@ describe("editor workbench", () => {
     expect(container.querySelector(".react-flow__minimap")).toHaveStyle({ width: "140px", height: "96px" });
     expect(container.querySelector(".react-flow__edge-default")).toBeInTheDocument();
   });
+
+  it("renders a 300-node project without losing graph controls", () => {
+    localStorage.setItem("flowfilm-project", JSON.stringify(createLargeProject(300)));
+    render(<App />);
+    expect(screen.getByText("300 个节点")).toBeVisible();
+    expect(screen.getByRole("button", { name: "适应视图" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "隐藏小地图" })).toBeEnabled();
+  }, 15000);
 
   it("deletes a selected connection with the Delete key", () => {
     const { container } = render(<App />);
