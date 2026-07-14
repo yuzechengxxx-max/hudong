@@ -30,6 +30,7 @@ export function App() {
   const [rightWidth, setRightWidth] = useState(() => Number(localStorage.getItem("flowfilm-right-width")) || 330);
   const [timelineHeight, setTimelineHeight] = useState(() => Number(localStorage.getItem("flowfilm-timeline-height")) || 190);
   const [drawerWidth, setDrawerWidth] = useState(() => Number(localStorage.getItem("flowfilm-drawer-width")) || 340);
+  const [minimapVisible, setMinimapVisible] = useState(() => localStorage.getItem("flowfilm-minimap-visible") !== "false");
   const [runtime, setRuntime] = useState(() => { const value = createRuntime(project); value.start(); return value; });
   const [runtimeState, setRuntimeState] = useState<RuntimeSnapshot>(() => createRuntime(project).start());
   const importRef = useRef<HTMLInputElement>(null);
@@ -49,6 +50,7 @@ export function App() {
   }, [project]);
   useEffect(() => { localStorage.setItem("flowfilm-left-width", String(leftWidth)); localStorage.setItem("flowfilm-right-width", String(rightWidth)); localStorage.setItem("flowfilm-timeline-height", String(timelineHeight)); }, [leftWidth, rightWidth, timelineHeight]);
   useEffect(() => { localStorage.setItem("flowfilm-drawer-width", String(drawerWidth)); }, [drawerWidth]);
+  useEffect(() => { localStorage.setItem("flowfilm-minimap-visible", String(minimapVisible)); }, [minimapVisible]);
 
   function updateProject(mutator: (current: Project) => Project) {
     setProject(current => {
@@ -184,7 +186,7 @@ export function App() {
 
     <main className="work-area no-library" style={{ gridTemplateColumns: `minmax(0,1fr) 5px ${rightWidth}px` }}>
       <section className="center-stack">
-        <StoryGraph project={project} selectedIds={selectedIds} onSelect={selectNodes} onMove={moveNode} onCreate={(kind, x, y) => addNode(kind, { x, y })} onConnect={connectGraph} onDeleteNodes={deleteGraphNodes} onDeleteEdges={deleteGraphEdges} onAssetDrop={attachAsset} overlay={<FloatingPreview><PreviewDock project={project} node={previewNode} state={runtimeState} onAdvance={() => setRuntimeState(runtime.advance())} onChoose={port => setRuntimeState(runtime.choose(port))} onRestart={() => restart(false)} onExpand={() => setShowPlayer(true)}/><div className="canvas-preview-actions"><button className="preview-command" onClick={() => restart(false)}><RotateCcw size={14}/> 从头预览</button><button className="preview-command" onClick={() => { restart(true); setShowPlayer(true); }}><Maximize2 size={14}/> 弹出试玩</button></div></FloatingPreview>}/>
+        <StoryGraph project={project} selectedIds={selectedIds} minimapVisible={minimapVisible} onToggleMinimap={() => setMinimapVisible(value => !value)} onSelect={selectNodes} onMove={moveNode} onCreate={(kind, x, y) => addNode(kind, { x, y })} onConnect={connectGraph} onDeleteNodes={deleteGraphNodes} onDeleteEdges={deleteGraphEdges} onAssetDrop={attachAsset} overlay={<FloatingPreview><PreviewDock project={project} node={previewNode} state={runtimeState} onAdvance={() => setRuntimeState(runtime.advance())} onChoose={port => setRuntimeState(runtime.choose(port))} onRestart={() => restart(false)} onExpand={() => setShowPlayer(true)}/><div className="canvas-preview-actions"><button className="preview-command" onClick={() => restart(false)}><RotateCcw size={14}/> 从头预览</button><button className="preview-command" onClick={() => { restart(true); setShowPlayer(true); }}><Maximize2 size={14}/> 弹出试玩</button></div></FloatingPreview>}/>
         {timelineOpen ? <><ResizeHandle orientation="horizontal" onResize={delta => setTimelineHeight(value => Math.min(420, Math.max(110, value - delta)))}/><div data-testid="timeline-drawer" className="timeline-drawer" style={{ height: timelineHeight }}><Timeline selected={selected ?? project.nodes[0]}/></div></> : null}
       </section>
       <ResizeHandle orientation="vertical" onResize={delta => setRightWidth(value => Math.min(520, Math.max(260, value - delta)))}/>

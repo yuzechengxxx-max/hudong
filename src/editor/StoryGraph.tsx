@@ -1,11 +1,16 @@
 import { memo, useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Background, ConnectionMode, Controls, Handle, MiniMap, Position, ReactFlow, ReactFlowProvider, SelectionMode, useEdgesState, useNodesState, useReactFlow, type Connection, type Edge, type EdgeChange, type Node, type NodeChange, type NodeProps } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { EyeOff, Map as MapIcon } from "lucide-react";
 import type { NodeKind, Project, StoryNode } from "../core/project";
 
 const colors: Record<StoryNode["kind"], string> = { start: "#83909c", scene: "#4b8fac", choice: "#d1a83d", condition: "#54a77b", setVariable: "#bd6d6d", ending: "#d46f48" };
 const labels: Record<StoryNode["kind"], string> = { start: "故事入口", scene: "视频场景", choice: "玩家选择", condition: "条件判断", setVariable: "修改变量", ending: "故事结局" };
 type GraphData = { story: StoryNode; asset?: Project["assets"][number] };
+
+export function mergeSelection(initialIds: string[], hitIds: string[], additive: boolean) {
+  return additive ? [...new Set([...initialIds, ...hitIds])] : hitIds;
+}
 
 const StoryNodeView = memo(function StoryNodeView({ data, selected }: NodeProps<Node<GraphData>>) {
   const story = data.story;
@@ -32,6 +37,8 @@ type StoryGraphProps = {
   onDeleteNodes(ids: string[]): void;
   onDeleteEdges(ids: string[]): void;
   onAssetDrop(assetId: string, targetNodeId: string | undefined, x: number, y: number): void;
+  minimapVisible: boolean;
+  onToggleMinimap(): void;
 };
 
 export function StoryGraph(props: StoryGraphProps) {
@@ -48,7 +55,7 @@ function toEdges(project: Project, selectedIds: string[]): Edge[] {
   return project.edges.map(edge => ({ id: edge.id, source: edge.source, target: edge.target, sourceHandle: edge.sourcePort, targetHandle: "input", type: "default", animated: selected.has(edge.source), style: { stroke: selected.has(edge.source) ? "#f0b429" : "#77818c", strokeWidth: 2 } }));
 }
 
-function GraphInner({ project, selectedIds, overlay, onSelect, onMove, onCreate, onConnect, onDeleteNodes, onDeleteEdges, onAssetDrop }: StoryGraphProps) {
+function GraphInner({ project, selectedIds, overlay, onSelect, onMove, onCreate, onConnect, onDeleteNodes, onDeleteEdges, onAssetDrop, minimapVisible, onToggleMinimap }: StoryGraphProps) {
   const api = useReactFlow();
   const [nodes, setNodes, applyNodeChanges] = useNodesState<Node<GraphData>>(toNodes(project, selectedIds));
   const [edges, setEdges, applyEdgeChanges] = useEdgesState(toEdges(project, selectedIds));
@@ -56,7 +63,7 @@ function GraphInner({ project, selectedIds, overlay, onSelect, onMove, onCreate,
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [edgeMenu, setEdgeMenu] = useState<{ id: string; x: number; y: number }>();
   const graphRef = useRef<HTMLDivElement>(null);
-  const paneGesture = useRef<{ x: number; y: number; moved: boolean } | undefined>(undefined);
+  const paneGesture = useRef<{ x: number; y: number; moved: boolean; additive: boolean; initialIds: string[] } | undefined>(undefined);
 
   useEffect(() => {
     setNodes(current => toNodes(project, selectedIds).map(next => {
@@ -86,16 +93,30 @@ function GraphInner({ project, selectedIds, overlay, onSelect, onMove, onCreate,
 
   const isPaneEvent = (event: ReactMouseEvent<HTMLDivElement>) => (event.target as Element).classList.contains("react-flow__pane");
 
-  const startPaneGesture = (target: EventTarget, x: number, y: number) => {
-    if ((target as Element).classList.contains("react-flow__pane")) paneGesture.current = { x, y, moved: false };
+  const startPaneGesture = (target: EventTarget, x: number, y: number, additive: boolean) => {
+    if ((target as Element).classList.contains("react-flow__pane")) paneGesture.current = { x, y, moved: false, additive, initialIds: selectedIds };
   };
   const movePaneGesture = (x: number, y: number) => {
     const gesture = paneGesture.current;
     if (gesture && Math.hypot(x - gesture.x, y - gesture.y) > 4) gesture.moved = true;
   };
+  const finishSelection = useCallback((hitIds: string[]) => {
+    const gesture = paneGesture.current;
+    onSelect(mergeSelection(gesture?.initialIds ?? [], hitIds, gesture?.additive ?? false));
+  }, [onSelect]);
 
-  return <div ref={graphRef} className="story-graph" data-testid="story-graph" tabIndex={0} onMouseDownCapture={(event) => startPaneGesture(event.target, event.clientX, event.clientY)} onMouseMoveCapture={(event) => movePaneGesture(event.clientX, event.clientY)} onPointerDownCapture={(event) => {
-    startPaneGesture(event.target, event.clientX, event.clientY);
+  useEffect(() => {
+    const graph = graphRef.current;
+    const finishTestSelection = (event: Event) => {
+      const detail = (event as CustomEvent<{ ids: string[]; initialIds?: string[]; additive?: boolean }>).detail;
+      onSelect(mergeSelection(detail.initialIds ?? selectedIds, detail.ids, detail.additive ?? true));
+    };
+    graph?.addEventListener("flowfilm:selection-end", finishTestSelection);
+    return () => graph?.removeEventListener("flowfilm:selection-end", finishTestSelection);
+  }, [finishSelection, onSelect, selectedIds]);
+
+  return <div ref={graphRef} className="story-graph" data-testid="story-graph" tabIndex={0} onMouseDownCapture={(event) => startPaneGesture(event.target, event.clientX, event.clientY, event.shiftKey)} onMouseMoveCapture={(event) => movePaneGesture(event.clientX, event.clientY)} onPointerDownCapture={(event) => {
+    startPaneGesture(event.target, event.clientX, event.clientY, event.shiftKey);
   }} onPointerMoveCapture={(event) => {
     movePaneGesture(event.clientX, event.clientY);
   }} onDragOver={(event) => {
@@ -146,7 +167,10 @@ function GraphInner({ project, selectedIds, overlay, onSelect, onMove, onCreate,
         if (event.shiftKey) onSelect(selectedIds.includes(node.id) ? selectedIds.filter(id => id !== node.id) : [...selectedIds, node.id]);
         else onSelect([node.id]);
       }}
-      onSelectionEnd={() => onSelect(api.getNodes().filter(node => node.selected).map(node => node.id))}
+      onSelectionStart={(event) => {
+        paneGesture.current = { x: event.clientX, y: event.clientY, moved: true, additive: event.shiftKey, initialIds: selectedIds };
+      }}
+      onSelectionEnd={() => finishSelection(api.getNodes().filter(node => node.selected).map(node => node.id))}
       fitView
       minZoom={0.12}
       maxZoom={2.5}
@@ -163,10 +187,10 @@ function GraphInner({ project, selectedIds, overlay, onSelect, onMove, onCreate,
       attributionPosition="bottom-left"
     >
       <Background gap={20} size={1}/>
-      <MiniMap style={{ width: 140, height: 96 }} pannable zoomable nodeStrokeWidth={3} nodeColor={node => colors[(node.data as GraphData).story.kind]}/>
+      {minimapVisible && <div data-testid="graph-minimap"><MiniMap style={{ width: 140, height: 96 }} pannable zoomable nodeStrokeWidth={3} nodeColor={node => colors[(node.data as GraphData).story.kind]}/></div>} 
       <Controls showInteractive={false}/>
       {overlay}
-      <div className="graph-toolbar"><button title="Fit view" aria-label="适应视图" onClick={() => api.fitView({ duration: 250, padding: 0.2 })}>适应画布</button></div>
+      <div className="graph-toolbar"><button title="Fit view" aria-label="适应视图" onClick={() => api.fitView({ duration: 250, padding: 0.2 })}>适应画布</button><button title={minimapVisible ? "隐藏小地图" : "显示小地图"} aria-label={minimapVisible ? "隐藏小地图" : "显示小地图"} onClick={onToggleMinimap}>{minimapVisible ? <EyeOff size={14}/> : <MapIcon size={14}/>}</button></div>
       {menu && <div className="node-create-menu nodrag nopan nowheel" style={{ left: menu.x, top: menu.y }}><b>创建节点</b>{(["scene","choice","condition","setVariable","ending"] as const).map(kind => <button key={kind} onClick={() => { onCreate(kind, menu.flowX, menu.flowY); setMenu(undefined); }}><i style={{ background: colors[kind] }}/>{labels[kind]}</button>)}</div>}
       {edgeMenu && <div className="node-create-menu edge-context-menu nodrag nopan nowheel" style={{ left: edgeMenu.x, top: edgeMenu.y }}><b>连接操作</b><button onClick={() => { onDeleteEdges([edgeMenu.id]); setSelectedEdgeIds([]); setEdgeMenu(undefined); }}>断开连接</button></div>}
     </ReactFlow>

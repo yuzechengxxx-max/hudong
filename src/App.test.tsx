@@ -159,6 +159,24 @@ describe("editor workbench", () => {
     expect(container.querySelectorAll(".react-flow__node.selected")).toHaveLength(1);
   });
 
+  it("adds marquee hits to the existing selection while Shift is held", () => {
+    const { container } = render(<App />);
+    const pane = container.querySelector(".react-flow__pane");
+    const graph = screen.getByTestId("story-graph");
+    fireEvent.pointerDown(pane!, { clientX: 120, clientY: 120, shiftKey: true });
+    fireEvent.pointerMove(pane!, { clientX: 260, clientY: 240, shiftKey: true });
+    fireEvent(graph, new CustomEvent("flowfilm:selection-end", { detail: { ids: ["ending"], initialIds: ["choice"], additive: true } }));
+    expect(container.querySelectorAll(".react-flow__node.selected")).toHaveLength(2);
+  });
+
+  it("toggles the minimap and remembers the editor preference", async () => {
+    render(<App />);
+    expect(screen.getByTestId("graph-minimap")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "隐藏小地图" }));
+    expect(screen.queryByTestId("graph-minimap")).not.toBeInTheDocument();
+    expect(localStorage.getItem("flowfilm-minimap-visible")).toBe("false");
+  });
+
   it("copies and pastes the current node selection", () => {
     render(<App />);
     fireEvent.keyDown(window, { key: "c", ctrlKey: true });
