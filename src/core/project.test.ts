@@ -27,4 +27,15 @@ describe("ProjectSchema", () => {
     const singleChoice = { ...project, nodes: project.nodes.map(node => node.kind === "choice" ? { ...node, choices: [node.choices[0]] } : node) };
     expect(ProjectSchema.parse(singleChoice).nodes.find(node => node.kind === "choice")).toMatchObject({ choices: [{ id: "warehouse" }] });
   });
+
+  it("adds default display settings to older projects", () => {
+    const legacy = createStarterProject() as ReturnType<typeof createStarterProject> & { display?: unknown };
+    delete legacy.display;
+    expect(ProjectSchema.parse(legacy).display).toEqual({ aspectRatio: "16:9", width: 1920, height: 1080 });
+  });
+
+  it("preserves customized display settings", () => {
+    const project = { ...createStarterProject(), display: { aspectRatio: "21:9", width: 2560, height: 1080 } };
+    expect(ProjectSchema.parse(project).display).toEqual(project.display);
+  });
 });

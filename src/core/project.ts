@@ -3,6 +3,11 @@ import { z } from "zod";
 const PositionSchema = z.object({ x: z.number(), y: z.number() });
 const BaseNodeSchema = z.object({ id: z.string().min(1), title: z.string().min(1), position: PositionSchema });
 const ValueSchema = z.union([z.string(), z.number(), z.boolean()]);
+const DisplaySettingsSchema = z.object({
+  aspectRatio: z.enum(["16:9", "21:9", "4:3"]),
+  width: z.number().int().min(320).max(7680),
+  height: z.number().int().min(180).max(4320),
+});
 
 export const StoryNodeSchema = z.discriminatedUnion("kind", [
   BaseNodeSchema.extend({ kind: z.literal("start") }),
@@ -19,6 +24,7 @@ export const ProjectSchema = z.object({
   edges: z.array(z.object({ id: z.string(), source: z.string(), sourcePort: z.string(), target: z.string() })),
   variables: z.array(z.object({ id: z.string(), name: z.string(), type: z.enum(["number", "string", "boolean"]), initialValue: ValueSchema })),
   assets: z.array(z.object({ id: z.string(), name: z.string(), type: z.string(), size: z.number(), url: z.string() })).default([]),
+  display: DisplaySettingsSchema.default({ aspectRatio: "16:9", width: 1920, height: 1080 }),
   ui: z.object({ accent: z.string(), dialogueOpacity: z.number().min(0).max(1), buttonRadius: z.number().min(0) }),
 });
 
@@ -43,6 +49,7 @@ export function createStarterProject(): Project {
     ],
     variables: [{ id: "affection", name: "林夏好感度", type: "number", initialValue: 0 }],
     assets: [],
+    display: { aspectRatio: "16:9", width: 1920, height: 1080 },
     ui: { accent: "#f0b429", dialogueOpacity: 0.86, buttonRadius: 6 },
   };
 }
