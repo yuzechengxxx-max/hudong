@@ -6,8 +6,11 @@ import { createRuntime, type RuntimeSnapshot } from "./core/runtime";
 import { ResizeHandle } from "./editor/ResizeHandle";
 import { StoryGraph } from "./editor/StoryGraph";
 import { ProjectSettings } from "./editor/ProjectSettings";
+import { EditorShell } from "./editor/EditorShell";
 import { duplicateSelection, removeSelection } from "./editor/projectCommands";
 import { persistProject } from "./editor/saveProject";
+import { IconButton } from "./editor/ui";
+import { useEditorTheme } from "./editor/theme";
 
 type Tab = "nodes" | "assets" | "project";
 const labels: Record<NodeKind, string> = { start: "故事入口", scene: "视频场景", choice: "玩家选择", condition: "条件判断", setVariable: "修改变量", ending: "故事结局" };
@@ -19,6 +22,7 @@ function loadInitialProject() {
 }
 
 export function App() {
+  const { preference: themePreference, setPreference: setThemePreference } = useEditorTheme();
   const [project, setProject] = useState<Project>(loadInitialProject);
   const [tab, setTab] = useState<Tab>("nodes");
   const [selectedIds, setSelectedIds] = useState<string[]>(() => [project.nodes.find(n => n.kind === "choice")?.id ?? project.nodes[0].id]);
@@ -175,8 +179,8 @@ export function App() {
     reader.readAsDataURL(file);
   }
 
-  return <div className="app-shell">
-    <header className="topbar">
+  return <EditorShell>
+    <header className="topbar tool-island glass-panel" data-testid="tool-island">
       <div className="brand-mark">映流 <span>FlowFilm</span></div><div className="crumb">{project.title} / 主剧情</div><div className="top-spacer" />
       <button className="toolbar-button" aria-label="保存项目" data-state={saveStatus} onClick={() => commitSave(true)}>{saveStatus === "saved" ? <CheckCircle2 size={15}/> : <Save size={15}/>} {saveStatus === "saving" ? "保存中" : saveStatus === "saved" ? "已保存" : saveStatus === "error" ? "保存失败" : "保存"}</button>
       <button className="toolbar-button" onClick={() => setDrawer(value => value === "assets" ? undefined : "assets")}><Upload size={15}/> 素材</button>
@@ -187,25 +191,33 @@ export function App() {
       <button className="publish" onClick={exportWeb}><Download size={15}/> 导出网页作品</button>
     </header>
 
+    <nav className="workspace-rail glass-panel" aria-label="工作区">
+      <IconButton label="剧情画布" active><Film size={17}/></IconButton>
+      <IconButton label="打开素材" onClick={() => setDrawer(value => value === "assets" ? undefined : "assets")}><ImageIcon size={17}/></IconButton>
+      <IconButton label="打开项目" onClick={() => setDrawer(value => value === "project" ? undefined : "project")}><FileJson size={17}/></IconButton>
+      <IconButton label="打开设置" onClick={() => setDrawer(value => value === "settings" ? undefined : "settings")}><Settings size={17}/></IconButton>
+      <IconButton label="打开试玩" onClick={() => setShowPlayer(true)}><Play size={17}/></IconButton>
+    </nav>
+
     <main className="work-area no-library" style={{ gridTemplateColumns: `minmax(0,1fr) 5px ${rightWidth}px` }}>
       <section className="center-stack">
         <StoryGraph project={project} selectedIds={selectedIds} minimapVisible={minimapVisible} onToggleMinimap={() => setMinimapVisible(value => !value)} onSelect={selectNodes} onMove={moveNode} onCreate={(kind, x, y) => addNode(kind, { x, y })} onConnect={connectGraph} onDeleteNodes={deleteGraphNodes} onDeleteEdges={deleteGraphEdges} onAssetDrop={attachAsset} overlay={<FloatingPreview><PreviewDock project={project} node={previewNode} state={runtimeState} onAdvance={() => setRuntimeState(runtime.advance())} onChoose={port => setRuntimeState(runtime.choose(port))} onRestart={() => restart(false)} onExpand={() => setShowPlayer(true)}/><div className="canvas-preview-actions"><button className="preview-command" onClick={() => restart(false)}><RotateCcw size={14}/> 从头预览</button><button className="preview-command" onClick={() => { restart(true); setShowPlayer(true); }}><Maximize2 size={14}/> 弹出试玩</button></div></FloatingPreview>}/>
         {timelineOpen ? <><ResizeHandle orientation="horizontal" onResize={delta => setTimelineHeight(value => Math.min(420, Math.max(110, value - delta)))}/><div data-testid="timeline-drawer" className="timeline-drawer" style={{ height: timelineHeight }}><Timeline selected={selected ?? project.nodes[0]}/></div></> : null}
       </section>
       <ResizeHandle orientation="vertical" onResize={delta => setRightWidth(value => Math.min(520, Math.max(260, value - delta)))}/>
-      <aside className="inspector resizable-panel"><div className="inspector-title">属性</div><div className="form">{selected ? <>
+      <aside className="inspector inspector-float glass-panel resizable-panel"><div className="inspector-title">属性</div><div className="form">{selected ? <>
         <Inspector project={project} selected={selected} updateSelected={updateSelected} onAddChoice={addChoiceOption} onMoveChoice={moveChoiceOption} onDeleteChoice={deleteChoiceOption}/>
         {outputPorts(selected).map(port => { const edge = project.edges.find(item => item.source === selected.id && item.sourcePort === port.value); return <div className="connection-row" key={port.value}><label>{port.label}<select aria-label={port.value === "next" ? "连接到" : `${port.label}连接到`} value={edge?.target ?? ""} onChange={event => event.target.value && connect(port.value, event.target.value)}><option value="">未连接</option>{project.nodes.filter(node => node.id !== selected.id).map(node => <option key={node.id} value={node.id}>{node.title}</option>)}</select></label>{edge && <><small>已连接到：{project.nodes.find(node => node.id === edge.target)?.title}</small><button className="icon-text" onClick={() => removeEdge(edge.id)}>断开</button></>}</div>; })}
         <button className="danger-button" aria-label="删除选中节点" disabled={selected.kind === "start"} onClick={deleteSelected}><Trash2 size={14}/> 删除选中节点</button>
         <div className="theme-section"><h3>游戏 UI</h3><label>强调色<input aria-label="强调色" type="color" value={project.ui.accent} onChange={event => updateProject(current => ({ ...current, ui: { ...current.ui, accent: event.target.value } }))}/></label><label>对话框透明度<input type="range" min="0.3" max="1" step="0.05" value={project.ui.dialogueOpacity} onChange={event => updateProject(current => ({ ...current, ui: { ...current.ui, dialogueOpacity: Number(event.target.value) } }))}/></label></div>
       </> : <div className="inspector-empty"><p>未选择节点</p><small>单击节点查看属性，或双击画布创建节点。</small></div>}</div></aside>
-      {drawer && <aside className="workspace-drawer" style={{ width: drawerWidth }}><header><b>{drawer === "assets" ? "素材" : drawer === "settings" ? "项目设置" : "项目"}</b><button aria-label="关闭面板" onClick={() => setDrawer(undefined)}><X size={16}/></button></header>{drawer === "assets" ? <AssetLibrary project={project} onImport={importAsset} onRemove={id => updateProject(current => ({ ...current, assets: current.assets.filter(asset => asset.id !== id), nodes: current.nodes.map(node => node.kind === "scene" && node.assetId === id ? { ...node, assetId: undefined, mediaUrl: "" } : node) }))}/> : drawer === "settings" ? <ProjectSettings project={project} onChange={next => updateProject(() => next)}/> : <ProjectPanel project={project} onTitle={title => updateProject(current => ({ ...current, title }))} onExport={exportProject} onImport={() => importRef.current?.click()} onAddVariable={() => updateProject(current => ({ ...current, variables: [...current.variables, { id: `var-${Date.now()}`, name: "新变量", type: "number", initialValue: 0 }] }))}/>}<div className="drawer-resize" role="separator" aria-label={`调整${drawer === "assets" ? "素材" : drawer === "settings" ? "设置" : "项目"}面板宽度`} onPointerDown={event => { drawerResizeRef.current = { x: event.clientX, width: drawerWidth }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!drawerResizeRef.current || !event.currentTarget.hasPointerCapture(event.pointerId)) return; setDrawerWidth(Math.min(620, Math.max(280, drawerResizeRef.current.width + event.clientX - drawerResizeRef.current.x))); }} onPointerUp={() => { drawerResizeRef.current = undefined; }}/></aside>}
+      {drawer && <aside className="workspace-drawer" style={{ width: drawerWidth }}><header><b>{drawer === "assets" ? "素材" : drawer === "settings" ? "项目设置" : "项目"}</b><button aria-label="关闭面板" onClick={() => setDrawer(undefined)}><X size={16}/></button></header>{drawer === "assets" ? <AssetLibrary project={project} onImport={importAsset} onRemove={id => updateProject(current => ({ ...current, assets: current.assets.filter(asset => asset.id !== id), nodes: current.nodes.map(node => node.kind === "scene" && node.assetId === id ? { ...node, assetId: undefined, mediaUrl: "" } : node) }))}/> : drawer === "settings" ? <ProjectSettings project={project} onChange={next => updateProject(() => next)} themePreference={themePreference} onThemePreferenceChange={setThemePreference}/> : <ProjectPanel project={project} onTitle={title => updateProject(current => ({ ...current, title }))} onExport={exportProject} onImport={() => importRef.current?.click()} onAddVariable={() => updateProject(current => ({ ...current, variables: [...current.variables, { id: `var-${Date.now()}`, name: "新变量", type: "number", initialValue: 0 }] }))}/>}<div className="drawer-resize" role="separator" aria-label={`调整${drawer === "assets" ? "素材" : drawer === "settings" ? "设置" : "项目"}面板宽度`} onPointerDown={event => { drawerResizeRef.current = { x: event.clientX, width: drawerWidth }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!drawerResizeRef.current || !event.currentTarget.hasPointerCapture(event.pointerId)) return; setDrawerWidth(Math.min(620, Math.max(280, drawerResizeRef.current.width + event.clientX - drawerResizeRef.current.x))); }} onPointerUp={() => { drawerResizeRef.current = undefined; }}/></aside>}
       <input ref={importRef} hidden type="file" accept=".json,.flowfilm.json" onChange={event => importProject(event.target.files?.[0])}/>
     </main>
-    <footer className="statusbar"><span className={issues.some(issue => issue.severity === "error") ? "unhealthy" : "healthy"}>{issues.length ? <AlertTriangle size={12}/> : <CheckCircle2 size={12}/>} {issues.length ? `${issues.length} 个问题` : "项目正常"}</span><span>{project.nodes.length} 个节点</span><span>{project.assets.length} 个素材</span><span>{project.variables.length} 个变量</span><span className={`save-state ${saveStatus}`}>{saveStatus === "saving" ? "保存中…" : saveStatus === "error" ? "保存失败" : saveStatus === "saved" ? `已保存 · ${savedAt}` : "有未保存修改"}</span><span className="top-spacer"/><button aria-label="演出时间线" className={timelineOpen ? "active" : ""} onClick={() => setTimelineOpen(value => !value)}>演出时间线</button><button onClick={() => { setLeftWidth(230); setRightWidth(330); setTimelineHeight(190); }}>恢复布局</button></footer>
+    <footer className="statusbar status-float glass-panel" data-testid="status-float"><span className={issues.some(issue => issue.severity === "error") ? "unhealthy" : "healthy"}>{issues.length ? <AlertTriangle size={12}/> : <CheckCircle2 size={12}/>} {issues.length ? `${issues.length} 个问题` : "项目正常"}</span><span>{project.nodes.length} 个节点</span><span>{project.assets.length} 个素材</span><span>{project.variables.length} 个变量</span><span className={`save-state ${saveStatus}`}>{saveStatus === "saving" ? "保存中…" : saveStatus === "error" ? "保存失败" : saveStatus === "saved" ? `已保存 · ${savedAt}` : "有未保存修改"}</span><span className="top-spacer"/><button aria-label="演出时间线" className={timelineOpen ? "active" : ""} onClick={() => setTimelineOpen(value => !value)}>演出时间线</button><button onClick={() => { setLeftWidth(230); setRightWidth(330); setTimelineHeight(190); }}>恢复布局</button></footer>
     {showDiagnostics && <Modal title="项目检查" onClose={() => setShowDiagnostics(false)}><div className="issue-list">{issues.length ? issues.map((issue, index) => <button key={`${issue.code}-${index}`} onClick={() => { if (issue.nodeId) setSelectedIds([issue.nodeId]); setShowDiagnostics(false); }}><b>{issue.severity === "error" ? "错误" : "警告"}</b><span>{issue.message}</span></button>) : <div className="empty-state"><CheckCircle2 size={32}/><h3>项目可以发布</h3><p>没有发现剧情连接问题。</p></div>}</div></Modal>}
     {showPlayer && <Modal wide title="独立试玩" onClose={() => setShowPlayer(false)}><div className="full-player"><PreviewDock project={project} node={previewNode} state={runtimeState} onAdvance={() => setRuntimeState(runtime.advance())} onChoose={port => setRuntimeState(runtime.choose(port))} onRestart={() => restart(false)}/><aside><h3>运行状态</h3>{Object.entries(runtimeState.variables).map(([key, value]) => <p key={key}>{project.variables.find(item => item.id === key)?.name ?? key}<b>{String(value)}</b></p>)}<button onClick={() => restart(false)}><RotateCcw size={14}/> 从头开始</button></aside></div></Modal>}
-  </div>;
+  </EditorShell>;
 }
 
 function NodeLibrary({ onAdd }: { onAdd(kind: Exclude<NodeKind, "start">): void }) { return <><label className="search"><Search size={14}/><input aria-label="搜索节点" placeholder="搜索节点类型"/></label><section className="library-group"><h3>叙事</h3><LibraryButton kind="scene" onAdd={onAdd}/><LibraryButton kind="choice" onAdd={onAdd}/></section><section className="library-group"><h3>逻辑</h3><LibraryButton kind="condition" onAdd={onAdd}/><LibraryButton kind="setVariable" onAdd={onAdd}/><LibraryButton kind="ending" onAdd={onAdd}/></section><button className="add-node" onClick={() => onAdd("choice")}><Plus size={15}/> 添加玩家选择</button></>; }

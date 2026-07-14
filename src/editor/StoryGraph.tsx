@@ -16,7 +16,7 @@ const StoryNodeView = memo(function StoryNodeView({ data, selected }: NodeProps<
   const story = data.story;
   const mediaOffset = story.kind === "scene" && data.asset ? 58 : 0;
   const handles = story.kind === "choice" ? story.choices.map((choice, index) => ({ id: choice.id, label: choice.label, top: 68 + index * 25 })) : story.kind === "condition" ? [{ id: "true", label: "成立", top: 70 }, { id: "false", label: "不成立", top: 96 }] : story.kind === "ending" ? [] : [{ id: "next", label: "下一步", top: 72 + mediaOffset }];
-  return <div className={`graph-node ${selected ? "selected" : ""} ${data.asset ? "has-media" : ""}`} style={{ "--node-color": colors[story.kind], minHeight: Math.max(104 + mediaOffset, 70 + handles.length * 25) } as React.CSSProperties}>
+  return <div className={`graph-node ${selected ? "selected" : ""} ${data.asset ? "has-media" : ""}`} data-kind={story.kind} style={{ "--node-color": colors[story.kind], minHeight: Math.max(104 + mediaOffset, 70 + handles.length * 25) } as React.CSSProperties}>
     <Handle type="target" position={Position.Left} id="input" className="graph-handle input"/>
     <div className="graph-node-body" aria-label={story.title} role="button" tabIndex={0}><span>{labels[story.kind]}</span><strong>{story.title}</strong><small>{summary(story)}</small></div>
     {story.kind === "scene" && data.asset && <div className="graph-node-media">{data.asset.type.startsWith("image/") ? <img className="contain-media" src={data.asset.url} alt={data.asset.name}/> : data.asset.type.startsWith("video/") ? <video className="contain-media" src={data.asset.url} aria-label={data.asset.name} muted preload="metadata"/> : <span>{data.asset.name}</span>}</div>}

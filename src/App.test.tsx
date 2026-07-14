@@ -13,6 +13,19 @@ describe("editor workbench", () => {
     await userEvent.click(screen.getByRole("button", { name }));
   }
 
+  it("renders the glass workbench shell around the graph", () => {
+    render(<App />);
+    expect(screen.getByTestId("tool-island")).toBeVisible();
+    expect(screen.getByRole("navigation", { name: "工作区" })).toBeVisible();
+    expect(screen.getByTestId("status-float")).toBeVisible();
+    expect(screen.getByTestId("story-graph")).toBeVisible();
+  });
+
+  it("exposes node kinds for neutral typed node chrome", () => {
+    const { container } = render(<App />);
+    expect(container.querySelector(".graph-node[data-kind='choice']")).toBeInTheDocument();
+  });
+
   it("selects a node and edits its title in the inspector", async () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "要不要赴约？" }));
@@ -217,8 +230,17 @@ describe("editor workbench", () => {
     await userEvent.clear(width);
     await userEvent.type(width, "2560");
     expect(width).toHaveValue(2560);
-    expect(screen.getByText("浅色与跟随系统主题将在后续版本提供")).toBeVisible();
+    expect(screen.getByRole("group", { name: "编辑器主题" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "自动" })).toBeVisible();
     expect(screen.getByTestId("preview-stage")).toHaveStyle({ aspectRatio: "21 / 9" });
+  });
+
+  it("switches editor themes and persists the preference", async () => {
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: "项目设置" }));
+    await userEvent.click(screen.getByRole("button", { name: "浅色" }));
+    expect(document.documentElement).toHaveAttribute("data-theme", "light");
+    expect(localStorage.getItem("flowfilm-editor-theme")).toBe("light");
   });
 
   it("renders media previews as complete thumbnails", async () => {
