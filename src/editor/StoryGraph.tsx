@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Background, ConnectionMode, Controls, Handle, MiniMap, Position, ReactFlow, ReactFlowProvider, SelectionMode, useEdgesState, useNodesState, useReactFlow, type Connection, type Edge, type EdgeChange, type Node, type NodeChange, type NodeProps } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { NodeKind, Project, StoryNode } from "../core/project";
@@ -21,9 +21,9 @@ const nodeTypes = { story: StoryNodeView };
 
 type StoryGraphProps = {
   project: Project;
-  selectedId?: string;
+  selectedIds: string[];
   overlay?: ReactNode;
-  onSelect(id?: string): void;
+  onSelect(ids: string[]): void;
   onMove(id: string, x: number, y: number): void;
   onCreate(kind: Exclude<NodeKind, "start">, x: number, y: number): void;
   onConnect(source: string, port: string, target: string): void;
@@ -35,28 +35,33 @@ export function StoryGraph(props: StoryGraphProps) {
   return <ReactFlowProvider><GraphInner {...props}/></ReactFlowProvider>;
 }
 
-function toNodes(project: Project, selectedId?: string): Node<GraphData>[] {
-  return project.nodes.map(story => ({ id: story.id, type: "story", position: story.position, selected: story.id === selectedId, data: { story } }));
+function toNodes(project: Project, selectedIds: string[]): Node<GraphData>[] {
+  const selected = new Set(selectedIds);
+  return project.nodes.map(story => ({ id: story.id, type: "story", position: story.position, selected: selected.has(story.id), data: { story } }));
 }
 
-function toEdges(project: Project, selectedId?: string): Edge[] {
-  return project.edges.map(edge => ({ id: edge.id, source: edge.source, target: edge.target, sourceHandle: edge.sourcePort, targetHandle: "input", type: "default", animated: selectedId === edge.source, style: { stroke: selectedId === edge.source ? "#f0b429" : "#77818c", strokeWidth: 2 } }));
+function toEdges(project: Project, selectedIds: string[]): Edge[] {
+  const selected = new Set(selectedIds);
+  return project.edges.map(edge => ({ id: edge.id, source: edge.source, target: edge.target, sourceHandle: edge.sourcePort, targetHandle: "input", type: "default", animated: selected.has(edge.source), style: { stroke: selected.has(edge.source) ? "#f0b429" : "#77818c", strokeWidth: 2 } }));
 }
 
-function GraphInner({ project, selectedId, overlay, onSelect, onMove, onCreate, onConnect, onDeleteNodes, onDeleteEdges }: StoryGraphProps) {
+function GraphInner({ project, selectedIds, overlay, onSelect, onMove, onCreate, onConnect, onDeleteNodes, onDeleteEdges }: StoryGraphProps) {
   const api = useReactFlow();
-  const [nodes, setNodes, applyNodeChanges] = useNodesState<Node<GraphData>>(toNodes(project, selectedId));
-  const [edges, setEdges, applyEdgeChanges] = useEdgesState(toEdges(project, selectedId));
+  const [nodes, setNodes, applyNodeChanges] = useNodesState<Node<GraphData>>(toNodes(project, selectedIds));
+  const [edges, setEdges, applyEdgeChanges] = useEdgesState(toEdges(project, selectedIds));
   const [menu, setMenu] = useState<{ x: number; y: number; flowX: number; flowY: number }>();
+  const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
+  const [edgeMenu, setEdgeMenu] = useState<{ id: string; x: number; y: number }>();
+  const graphRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setNodes(current => toNodes(project, selectedId).map(next => {
+    setNodes(current => toNodes(project, selectedIds).map(next => {
       const existing = current.find(node => node.id === next.id);
       return existing ? { ...next, position: existing.dragging ? existing.position : next.position, selected: next.selected } : next;
     }));
-  }, [project.nodes, selectedId, setNodes]);
+  }, [project.nodes, selectedIds, setNodes]);
 
-  useEffect(() => { setEdges(toEdges(project, selectedId)); }, [project.edges, selectedId, setEdges]);
+  useEffect(() => { setEdges(toEdges(project, selectedIds)); }, [project.edges, selectedIds, setEdges]);
 
   const onNodesChange = useCallback((changes: NodeChange<Node<GraphData>>[]) => {
     applyNodeChanges(changes);
@@ -77,10 +82,17 @@ function GraphInner({ project, selectedId, overlay, onSelect, onMove, onCreate, 
 
   const isPaneEvent = (event: ReactMouseEvent<HTMLDivElement>) => (event.target as Element).classList.contains("react-flow__pane");
 
-  return <div className="story-graph" data-testid="story-graph" onClickCapture={(event) => {
+  return <div ref={graphRef} className="story-graph" data-testid="story-graph" tabIndex={0} onKeyDownCapture={(event) => {
+    if ((event.key === "Delete" || event.key === "Backspace") && selectedEdgeIds.length) {
+      event.preventDefault();
+      onDeleteEdges(selectedEdgeIds);
+      setSelectedEdgeIds([]);
+    }
+  }} onClickCapture={(event) => {
     if (!isPaneEvent(event)) return;
-    onSelect(undefined);
+    onSelect([]);
     setMenu(undefined);
+    setEdgeMenu(undefined);
   }} onDoubleClickCapture={(event: ReactMouseEvent<HTMLDivElement>) => {
     if (!isPaneEvent(event)) return;
     const point = api.screenToFlowPosition({ x: event.clientX, y: event.clientY });
@@ -94,7 +106,18 @@ function GraphInner({ project, selectedId, overlay, onSelect, onMove, onCreate, 
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onConnect={handleConnect}
-      onNodeClick={(_event, node) => onSelect(node.id)}
+      onEdgeClick={(_event, edge) => { setSelectedEdgeIds([edge.id]); setEdgeMenu(undefined); }}
+      onEdgeContextMenu={(event, edge) => {
+        event.preventDefault();
+        const bounds = graphRef.current?.getBoundingClientRect();
+        setSelectedEdgeIds([edge.id]);
+        setEdgeMenu({ id: edge.id, x: event.clientX - (bounds?.left ?? 0), y: event.clientY - (bounds?.top ?? 0) });
+      }}
+      onNodeClick={(event, node) => {
+        if (event.shiftKey) onSelect(selectedIds.includes(node.id) ? selectedIds.filter(id => id !== node.id) : [...selectedIds, node.id]);
+        else onSelect([node.id]);
+      }}
+      onSelectionEnd={() => onSelect(api.getNodes().filter(node => node.selected).map(node => node.id))}
       fitView
       minZoom={0.12}
       maxZoom={2.5}
@@ -107,6 +130,7 @@ function GraphInner({ project, selectedId, overlay, onSelect, onMove, onCreate, 
       connectionMode={ConnectionMode.Loose}
       deleteKeyCode={["Backspace","Delete"]}
       multiSelectionKeyCode="Shift"
+      zoomOnDoubleClick={false}
       attributionPosition="bottom-left"
     >
       <Background gap={20} size={1}/>
@@ -115,6 +139,7 @@ function GraphInner({ project, selectedId, overlay, onSelect, onMove, onCreate, 
       {overlay}
       <div className="graph-toolbar"><button title="Fit view" aria-label="适应视图" onClick={() => api.fitView({ duration: 250, padding: 0.2 })}>适应画布</button></div>
       {menu && <div className="node-create-menu nodrag nopan nowheel" style={{ left: menu.x, top: menu.y }}><b>创建节点</b>{(["scene","choice","condition","setVariable","ending"] as const).map(kind => <button key={kind} onClick={() => { onCreate(kind, menu.flowX, menu.flowY); setMenu(undefined); }}><i style={{ background: colors[kind] }}/>{labels[kind]}</button>)}</div>}
+      {edgeMenu && <div className="node-create-menu edge-context-menu nodrag nopan nowheel" style={{ left: edgeMenu.x, top: edgeMenu.y }}><b>连接操作</b><button onClick={() => { onDeleteEdges([edgeMenu.id]); setSelectedEdgeIds([]); setEdgeMenu(undefined); }}>断开连接</button></div>}
     </ReactFlow>
   </div>;
 }

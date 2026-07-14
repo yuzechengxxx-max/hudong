@@ -63,6 +63,16 @@ describe("editor workbench", () => {
     expect(screen.getByText("scene.mp4")).toBeVisible();
   });
 
+  it("shows visual asset previews and a resizable asset drawer", async () => {
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: "素材" }));
+    const input = screen.getByLabelText("导入素材");
+    await userEvent.upload(input, new File(["image"], "poster.png", { type: "image/png" }));
+    expect(await screen.findByRole("img", { name: "poster.png" })).toBeVisible();
+    expect(screen.getByRole("separator", { name: "调整素材面板宽度" })).toBeVisible();
+    expect(screen.getByPlaceholderText("搜索素材")).toBeVisible();
+  });
+
   it("clears node selection when the blank canvas is clicked", async () => {
     const { container } = render(<App />);
     expect(screen.getByLabelText("节点名称")).toBeVisible();
@@ -88,6 +98,57 @@ describe("editor workbench", () => {
     expect(screen.getByRole("separator", { name: "调整预览大小" })).toBeVisible();
   });
 
+  it("selects all nodes and clears the selection with editor shortcuts", () => {
+    const { container } = render(<App />);
+    fireEvent.keyDown(window, { key: "a", ctrlKey: true });
+    expect(container.querySelectorAll(".react-flow__node.selected")).toHaveLength(4);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(container.querySelectorAll(".react-flow__node.selected")).toHaveLength(0);
+    expect(screen.getByText("未选择节点")).toBeVisible();
+  });
+
+  it("duplicates selected nodes and can undo the transaction", () => {
+    render(<App />);
+    fireEvent.keyDown(window, { key: "d", ctrlKey: true });
+    expect(screen.getByRole("button", { name: "要不要赴约？ 副本" })).toBeVisible();
+    fireEvent.keyDown(window, { key: "z", ctrlKey: true });
+    expect(screen.queryByRole("button", { name: "要不要赴约？ 副本" })).not.toBeInTheDocument();
+  });
+
+  it("does not run canvas shortcuts while editing text", async () => {
+    const { container } = render(<App />);
+    const title = screen.getByLabelText("节点名称");
+    await userEvent.click(title);
+    fireEvent.keyDown(title, { key: "a", ctrlKey: true });
+    expect(container.querySelectorAll(".react-flow__node.selected")).toHaveLength(1);
+  });
+
+  it("adds and removes individual nodes from a multi-selection with Shift", () => {
+    const { container } = render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "黎明之前" }), { shiftKey: true });
+    expect(container.querySelectorAll(".react-flow__node.selected")).toHaveLength(2);
+    expect(screen.getByLabelText("节点名称")).toHaveValue("黎明之前");
+    fireEvent.click(screen.getByRole("button", { name: "要不要赴约？" }), { shiftKey: true });
+    expect(container.querySelectorAll(".react-flow__node.selected")).toHaveLength(1);
+  });
+
+  it("copies and pastes the current node selection", () => {
+    render(<App />);
+    fireEvent.keyDown(window, { key: "c", ctrlKey: true });
+    fireEvent.keyDown(window, { key: "v", ctrlKey: true });
+    expect(screen.getByRole("button", { name: "要不要赴约？ 副本" })).toBeVisible();
+  });
+
+  it("exposes undo and redo as visible editor commands", () => {
+    render(<App />);
+    expect(screen.getByRole("button", { name: "撤销" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "重做" })).toBeDisabled();
+    fireEvent.keyDown(window, { key: "d", ctrlKey: true });
+    expect(screen.getByRole("button", { name: "撤销" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "撤销" }));
+    expect(screen.getByRole("button", { name: "重做" })).toBeEnabled();
+  });
+
   it("provides a real graph canvas and resizable work areas", () => {
     const { container } = render(<App />);
     expect(screen.getByTestId("story-graph")).toBeVisible();
@@ -96,6 +157,24 @@ describe("editor workbench", () => {
     expect(container.querySelector(".graph-node-body")).not.toHaveClass("nodrag");
     expect(container.querySelector(".react-flow__minimap")).toHaveStyle({ width: "140px", height: "96px" });
     expect(container.querySelector(".react-flow__edge-default")).toBeInTheDocument();
+  });
+
+  it("deletes a selected connection with the Delete key", () => {
+    const { container } = render(<App />);
+    const edge = container.querySelector('[data-testid="rf__edge-e-opening"]');
+    expect(edge).toBeInTheDocument();
+    fireEvent.click(edge!);
+    fireEvent.keyDown(edge!, { key: "Delete" });
+    expect(container.querySelector('[data-testid="rf__edge-e-opening"]')).not.toBeInTheDocument();
+  });
+
+  it("disconnects an edge from its context menu", async () => {
+    const { container } = render(<App />);
+    const edge = container.querySelector('[data-testid="rf__edge-e-opening"]');
+    expect(edge).toBeInTheDocument();
+    fireEvent.contextMenu(edge!, { clientX: 360, clientY: 220 });
+    await userEvent.click(screen.getByRole("button", { name: "断开连接" }));
+    expect(container.querySelector('[data-testid="rf__edge-e-opening"]')).not.toBeInTheDocument();
   });
 
   it("keeps the timeline collapsed until requested", async () => {
