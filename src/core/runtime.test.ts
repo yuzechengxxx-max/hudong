@@ -75,6 +75,16 @@ describe("story runtime", () => {
     expect(createRuntime(project).start()).toMatchObject({ currentNodeId: "chapter-ending", status: "ended" });
   });
 
+  it("resolves a chapter jump through the target chapter entry", () => {
+    const project = graph([
+      start(),
+      { id: "jump", kind: "jump", title: "Next chapter", position: at(1), chapterId: "main-story", targetType: "chapter", targetId: "chapter-two" },
+      { id: "chapter-two-ending", kind: "ending", title: "Chapter two ending", endingTitle: "Done", position: at(2), chapterId: "chapter-two" },
+    ], [edge("start", "next", "jump")]);
+    project.chapters.push({ id: "chapter-two", name: "Chapter Two", order: 1, entryNodeId: "chapter-two-ending" });
+    expect(createRuntime(project).start()).toMatchObject({ currentNodeId: "chapter-two-ending", status: "ended" });
+  });
+
   it("applies typed variable operations", () => {
     const project = graph([
       start(),
