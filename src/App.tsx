@@ -11,6 +11,7 @@ import { duplicateSelection, removeSelection } from "./editor/projectCommands";
 import { persistProject } from "./editor/saveProject";
 import { IconButton } from "./editor/ui";
 import { useEditorTheme } from "./editor/theme";
+import { calculateLeftPanelResize, type PanelResizeStart } from "./editor/panelResize";
 
 type Tab = "nodes" | "assets" | "project";
 const labels: Record<NodeKind, string> = { start: "故事入口", scene: "视频场景", choice: "玩家选择", condition: "条件判断", setVariable: "修改变量", ending: "故事结局" };
@@ -254,8 +255,8 @@ function Inspector({ project, selected, updateSelected, onAddChoice, onMoveChoic
 function DynamicEdges({ project }: { project: Project }) { return <svg className="connections">{project.edges.map(edge => { const source = project.nodes.find(node => node.id === edge.source); const target = project.nodes.find(node => node.id === edge.target); if (!source || !target) return null; const x1 = source.position.x + 185, y1 = source.position.y + 48, x2 = target.position.x, y2 = target.position.y + 48; return <path key={edge.id} d={`M ${x1} ${y1} C ${x1 + 55} ${y1}, ${x2 - 55} ${y2}, ${x2} ${y2}`}/>; })}</svg>; }
 function Timeline({ selected }: { selected: StoryNode }) { return <div className="timeline"><div className="track-labels"><b>演出时间线</b><span>画面</span><span>字幕 / 对白</span><span>音乐 / 音效</span><span>互动</span></div><div className="tracks"><div className="ruler">00:00　　　00:05　　　00:10　　　00:15</div><div className="clip video">{selected.kind === "scene" ? selected.title : "选择场景节点编辑演出"}</div><div className="clip dialogue">{selected.kind === "scene" ? selected.dialogue : "字幕轨道"}</div><div className="clip audio">环境音与配乐轨道</div><div className="clip choice">{selected.kind === "choice" ? "显示选项" : "互动轨道"}</div></div></div>; }
 function InspectorResizeHandle({ width, height, onResize }: { width: number; height: number; onResize(width: number, height: number): void }) {
-  const start = useRef<{ x: number; y: number } | undefined>(undefined);
-  return <div className="panel-resize inspector-resize" role="separator" aria-label="调整属性面板大小" onPointerDown={event => { event.preventDefault(); event.stopPropagation(); start.current = { x: event.clientX, y: event.clientY }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!start.current || !event.currentTarget.hasPointerCapture(event.pointerId)) return; onResize(Math.min(560, Math.max(280, width + start.current.x - event.clientX)), Math.min(window.innerHeight - 130, Math.max(280, height + event.clientY - start.current.y))); }} onPointerUp={() => { start.current = undefined; }}/>
+  const start = useRef<PanelResizeStart | undefined>(undefined);
+  return <div className="panel-resize inspector-resize" role="separator" aria-label="调整属性面板大小" onPointerDown={event => { event.preventDefault(); event.stopPropagation(); start.current = { x: event.clientX, y: event.clientY, width, height }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!start.current || !event.currentTarget.hasPointerCapture(event.pointerId)) return; const next = calculateLeftPanelResize(start.current, event.clientX, event.clientY, window.innerHeight); onResize(next.width, next.height); }} onPointerUp={() => { start.current = undefined; }}/>
 }
 
 function FloatingPreview({ children }: { children: React.ReactNode }) {

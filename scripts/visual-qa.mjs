@@ -28,24 +28,6 @@ async function capture(name, theme, viewport) {
   const backgroundMarkup = await page.locator(".react-flow__background").evaluate(element => element.outerHTML);
   const backgroundDotStyle = await page.locator(".react-flow__background-pattern.dots").evaluate(element => ({ fill: getComputedStyle(element).fill, opacity: getComputedStyle(element).opacity }));
   let resizeEvidence = null;
-  let navigationEvidence = null;
-  const viewportLayer = page.locator(".react-flow__viewport");
-  const pane = page.locator(".react-flow__pane");
-  if (await viewportLayer.count() && await pane.count()) {
-    const beforeTransform = await viewportLayer.getAttribute("style");
-    const paneBox = await pane.boundingBox();
-    if (paneBox) {
-      await page.mouse.move(paneBox.x + 500, paneBox.y + 500);
-      await page.mouse.down({ button: "middle" });
-      await page.mouse.move(paneBox.x + 560, paneBox.y + 535);
-      await page.mouse.up({ button: "middle" });
-      const afterPanTransform = await viewportLayer.getAttribute("style");
-      await page.mouse.move(paneBox.x + 500, paneBox.y + 500);
-      await page.mouse.wheel(0, -420);
-      const afterWheelTransform = await viewportLayer.getAttribute("style");
-      navigationEvidence = { beforeTransform, afterPanTransform, afterWheelTransform };
-    }
-  }
   const resizeHandle = page.getByRole("separator", { name: "调整属性面板大小" });
   if (await resizeHandle.count()) {
     const before = await page.locator(".inspector-float").boundingBox();
@@ -61,7 +43,7 @@ async function capture(name, theme, viewport) {
     }
   }
   await page.close();
-  return { name, theme, viewport, boxes, backgroundMarkup, backgroundDotStyle, resizeEvidence, navigationEvidence };
+  return { name, theme, viewport, boxes, backgroundMarkup, backgroundDotStyle, resizeEvidence };
 }
 
 const results = [
