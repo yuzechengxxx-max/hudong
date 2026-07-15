@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Download, FileJson, Film, Image as ImageIcon, Maximize2, Minus, Music, Play, Plus, RotateCcw, Save, Search, Settings, Trash2, Upload, X } from "lucide-react";
 import { diagnoseProject } from "./core/diagnostics";
-import { createNode, createStarterProject, ProjectSchema, type NodeKind, type Project, type StoryNode } from "./core/project";
+import { createNode, createStarterProject, type NodeKind, type Project, type StoryNode } from "./core/project";
 import { getNodeDefinition } from "./core/nodeRegistry";
+import { loadProject } from "./core/projectMigration";
 import { createRuntime, type RuntimeSnapshot } from "./core/runtime";
 import { ResizeHandle } from "./editor/ResizeHandle";
 import { StoryGraph } from "./editor/StoryGraph";
@@ -13,11 +14,12 @@ import { persistProject } from "./editor/saveProject";
 import { IconButton } from "./editor/ui";
 import { useEditorTheme } from "./editor/theme";
 import { calculateLeftPanelResize, type PanelResizeStart } from "./editor/panelResize";
+import { NodeInspector } from "./editor/NodeInspector";
 
 type Tab = "nodes" | "assets" | "project";
 
 function loadInitialProject() {
-  try { const saved = localStorage.getItem("flowfilm-project"); return saved ? ProjectSchema.parse(JSON.parse(saved)) : createStarterProject(); }
+  try { const saved = localStorage.getItem("flowfilm-project"); return saved ? loadProject(JSON.parse(saved)) : createStarterProject(); }
   catch { return createStarterProject(); }
 }
 
@@ -170,7 +172,7 @@ export function App() {
   function download(name: string, content: string, type: string) { const url = URL.createObjectURL(new Blob([content], { type })); const link = document.createElement("a"); link.href = url; link.download = name; link.click(); URL.revokeObjectURL(url); }
   function exportProject() { download(`${project.title}.flowfilm.json`, JSON.stringify(project, null, 2), "application/json;charset=utf-8"); }
   function exportWeb() { download(`${project.title}.html`, createPlayableHtml(project), "text/html;charset=utf-8"); }
-  function importProject(file?: File) { if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const next = ProjectSchema.parse(JSON.parse(String(reader.result))); setProject(next); setSelectedIds([next.nodes[0].id]); restart(); } catch { window.alert("项目文件格式不正确"); } }; reader.readAsText(file, "utf-8"); }
+  function importProject(file?: File) { if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const next = loadProject(JSON.parse(String(reader.result))); setProject(next); setSelectedIds([next.nodes[0].id]); restart(); } catch { window.alert("项目文件格式不正确或版本不受支持"); } }; reader.readAsText(file, "utf-8"); }
   function importAsset(file?: File) {
     if (!file) return;
     const id = `asset-${Date.now()}`;
@@ -206,7 +208,7 @@ export function App() {
         {timelineOpen ? <><ResizeHandle orientation="horizontal" onResize={delta => setTimelineHeight(value => Math.min(420, Math.max(110, value - delta)))}/><div data-testid="timeline-drawer" className="timeline-drawer" style={{ height: timelineHeight }}><Timeline selected={selected ?? project.nodes[0]}/></div></> : null}
       </section>
       <aside className="inspector inspector-float glass-panel resizable-panel" style={{ width: rightWidth, height: inspectorHeight }}><div className="inspector-title">属性</div><div className="form">{selected ? <>
-        <Inspector project={project} selected={selected} updateSelected={updateSelected} onAddChoice={addChoiceOption} onMoveChoice={moveChoiceOption} onDeleteChoice={deleteChoiceOption}/>
+        <NodeInspector project={project} selectedId={selected.id} onChange={next => updateProject(() => next)}/>
         {outputPorts(selected).map(port => { const edge = project.edges.find(item => item.source === selected.id && item.sourcePort === port.value); return <div className="connection-row" key={port.value}><label>{port.label}<select aria-label={port.value === "next" ? "连接到" : `${port.label}连接到`} value={edge?.target ?? ""} onChange={event => event.target.value && connect(port.value, event.target.value)}><option value="">未连接</option>{project.nodes.filter(node => node.id !== selected.id).map(node => <option key={node.id} value={node.id}>{node.title}</option>)}</select></label>{edge && <><small>已连接到：{project.nodes.find(node => node.id === edge.target)?.title}</small><button className="icon-text" onClick={() => removeEdge(edge.id)}>断开</button></>}</div>; })}
         <button className="danger-button" aria-label="删除选中节点" disabled={selected.kind === "start"} onClick={deleteSelected}><Trash2 size={14}/> 删除选中节点</button>
         <div className="theme-section"><h3>游戏 UI</h3><label>强调色<input aria-label="强调色" type="color" value={project.ui.accent} onChange={event => updateProject(current => ({ ...current, ui: { ...current.ui, accent: event.target.value } }))}/></label><label>对话框透明度<input type="range" min="0.3" max="1" step="0.05" value={project.ui.dialogueOpacity} onChange={event => updateProject(current => ({ ...current, ui: { ...current.ui, dialogueOpacity: Number(event.target.value) } }))}/></label></div>
