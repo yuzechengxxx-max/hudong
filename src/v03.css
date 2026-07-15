@@ -49,6 +49,11 @@ body,
 .work-area[data-layout="canvas-only"] { position: absolute; inset: 0; display: block !important; }
 .center-stack { position: absolute; inset: 0; display: flex; }
 .story-graph { width: 100%; height: 100%; }
+.story-graph .react-flow__pane {
+  background-image: radial-gradient(circle, var(--ff-canvas-dot) 1.25px, transparent 1.5px) !important;
+  background-size: 20px 20px !important;
+  background-position: 0 0 !important;
+}
 .react-flow__background pattern circle { fill: var(--ff-canvas-dot) !important; }
 
 .glass-panel,
@@ -223,6 +228,8 @@ body,
 [data-theme="light"] .ending-screen { color: #18232d; }
 [data-theme="light"] .choice-screen button,
 [data-theme="light"] .ending-screen button { background: rgba(255,255,255,.9); color: #18232d; }
+[data-theme="light"] .preview-command:hover,
+[data-theme="light"] .canvas-preview-actions button:hover { background: #202b36 !important; color: #ffffff !important; border-color: #202b36 !important; }
 
 .form input,
 .form textarea,

@@ -59,6 +59,26 @@ export function App() {
   useEffect(() => { localStorage.setItem("flowfilm-left-width", String(leftWidth)); localStorage.setItem("flowfilm-right-width", String(rightWidth)); localStorage.setItem("flowfilm-timeline-height", String(timelineHeight)); }, [leftWidth, rightWidth, timelineHeight]);
   useEffect(() => { localStorage.setItem("flowfilm-drawer-width", String(drawerWidth)); localStorage.setItem("flowfilm-inspector-height", String(inspectorHeight)); }, [drawerWidth, inspectorHeight]);
   useEffect(() => { localStorage.setItem("flowfilm-minimap-visible", String(minimapVisible)); }, [minimapVisible]);
+  useEffect(() => {
+    const handle = document.querySelector<HTMLElement>(".inspector-float .panel-resize");
+    if (!handle) return;
+    let start: { x: number; y: number; width: number; height: number } | undefined;
+    const onDown = (event: PointerEvent) => {
+      event.stopPropagation();
+      start = { x: event.clientX, y: event.clientY, width: rightWidth, height: inspectorHeight };
+      handle.setPointerCapture(event.pointerId);
+    };
+    const onMove = (event: PointerEvent) => {
+      if (!start || !handle.hasPointerCapture(event.pointerId)) return;
+      setRightWidth(Math.min(560, Math.max(280, start.width + start.x - event.clientX)));
+      setInspectorHeight(Math.min(window.innerHeight - 130, Math.max(280, start.height + event.clientY - start.y)));
+    };
+    const onUp = () => { start = undefined; };
+    handle.addEventListener("pointerdown", onDown, true);
+    handle.addEventListener("pointermove", onMove, true);
+    handle.addEventListener("pointerup", onUp, true);
+    return () => { handle.removeEventListener("pointerdown", onDown, true); handle.removeEventListener("pointermove", onMove, true); handle.removeEventListener("pointerup", onUp, true); };
+  }, [rightWidth, inspectorHeight]);
 
   function updateProject(mutator: (current: Project) => Project) {
     setProject(current => {

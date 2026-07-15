@@ -13,6 +13,13 @@ async function capture(name, theme, viewport) {
   await page.addInitScript(value => localStorage.setItem("flowfilm-editor-theme", value), theme);
   await page.goto("http://127.0.0.1:4180/", { waitUntil: "networkidle" });
   await page.screenshot({ path: `outputs/qa/flowfilm-${name}.png` });
+  if (theme === "light") {
+    const command = page.locator(".preview-command").first();
+    if (await command.count()) {
+      await command.hover();
+      await page.screenshot({ path: `outputs/qa/flowfilm-${name}-hover.png` });
+    }
+  }
   const boxes = await page.locator("[data-testid='tool-island'], .workspace-rail, .inspector-float, [data-testid='status-float']").evaluateAll(elements => elements.map(element => ({
     name: element.getAttribute("data-testid") || element.className,
     rect: element.getBoundingClientRect().toJSON(),
