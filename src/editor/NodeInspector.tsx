@@ -49,8 +49,8 @@ export function NodeInspector({ project, selectedId, onChange }: NodeInspectorPr
       {selected.action === "play" && <AudioFields assets={audioAssets} assetId={selected.assetId ?? ""} volume={selected.volume} onAsset={assetId => update({ assetId } as Partial<StoryNode>)} onVolume={volume => update({ volume } as Partial<StoryNode>)}/>} 
     </>}
     {selected.kind === "sound" && <AudioFields assets={audioAssets} assetId={selected.assetId} volume={selected.volume} onAsset={assetId => update({ assetId } as Partial<StoryNode>)} onVolume={volume => update({ volume } as Partial<StoryNode>)}/>} 
-    {selected.kind === "chapter" && <label>章节标识<input aria-label="章节标识" value={selected.chapterId} onChange={event => update({ chapterId: event.target.value } as Partial<StoryNode>)}/></label>}
-    {selected.kind === "jump" && <label>目标章节<select aria-label="目标章节" value={selected.chapterId} onChange={event => update({ chapterId: event.target.value } as Partial<StoryNode>)}><option value="">选择章节</option>{project.nodes.filter((node): node is Extract<StoryNode, { kind: "chapter" }> => node.kind === "chapter").map(node => <option key={node.id} value={node.chapterId}>{node.title}</option>)}</select></label>}
+    {selected.kind === "chapter" && <label>章节标识<input aria-label="章节标识" value={selected.anchorId} onChange={event => update({ anchorId: event.target.value } as Partial<StoryNode>)}/></label>}
+    {selected.kind === "jump" && <label>目标章节<select aria-label="目标章节" value={selected.targetId} onChange={event => update({ targetId: event.target.value } as Partial<StoryNode>)}><option value="">选择章节</option>{project.nodes.filter((node): node is Extract<StoryNode, { kind: "chapter" }> => node.kind === "chapter").map(node => <option key={node.id} value={node.anchorId}>{node.title}</option>)}</select></label>}
     {selected.kind === "ending" && <label>结局标题<input aria-label="结局标题" value={selected.endingTitle} onChange={event => update({ endingTitle: event.target.value } as Partial<StoryNode>)}/></label>}
   </>;
 }

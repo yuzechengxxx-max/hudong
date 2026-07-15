@@ -3,7 +3,13 @@ import { ProjectSchema, createNode, createStarterProject } from "./project";
 
 describe("ProjectSchema", () => {
   it("accepts a starter project", () => {
-    expect(ProjectSchema.parse(createStarterProject()).schemaVersion).toBe(2);
+    expect(ProjectSchema.parse(createStarterProject()).schemaVersion).toBe(3);
+  });
+
+  it("requires every node to belong to a declared chapter", () => {
+    const project = createStarterProject();
+    const invalid = { ...project, nodes: project.nodes.map((node, index) => index === 0 ? { ...node, chapterId: "missing" } : node) };
+    expect(() => ProjectSchema.parse(invalid)).toThrow();
   });
 
   it("rejects incomplete edges", () => {
@@ -48,8 +54,8 @@ describe("ProjectSchema", () => {
   it("accepts the expanded comparison and variable operations", () => {
     const project = createStarterProject();
     project.nodes.push(
-      { id: "contains", kind: "condition", title: "检查文本", position: { x: 0, y: 0 }, variableId: "affection", operator: "notContains", value: "秘密" },
-      { id: "multiply", kind: "setVariable", title: "翻倍", position: { x: 0, y: 0 }, variableId: "affection", operation: "multiply", value: 2 },
+      { id: "contains", kind: "condition", title: "检查文本", position: { x: 0, y: 0 }, chapterId: "main-story", variableId: "affection", operator: "notContains", value: "秘密" },
+      { id: "multiply", kind: "setVariable", title: "翻倍", position: { x: 0, y: 0 }, chapterId: "main-story", variableId: "affection", operation: "multiply", value: 2 },
     );
     expect(() => ProjectSchema.parse(project)).not.toThrow();
   });

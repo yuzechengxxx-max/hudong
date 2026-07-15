@@ -46,9 +46,9 @@ describe("editor workbench", () => {
   it("shows and skips a wait interaction", async () => {
     const project = createStarterProject();
     project.nodes = [
-      { id: "start", kind: "start", title: "开始", position: { x: 0, y: 0 } },
-      { id: "wait", kind: "wait", title: "等待", position: { x: 100, y: 0 }, durationMs: 2000 },
-      { id: "after", kind: "scene", title: "等待后的场景", position: { x: 200, y: 0 }, mediaUrl: "", speaker: "", dialogue: "", showDialogue: false },
+      { id: "start", kind: "start", title: "开始", position: { x: 0, y: 0 }, chapterId: "main-story" },
+      { id: "wait", kind: "wait", title: "等待", position: { x: 100, y: 0 }, chapterId: "main-story", durationMs: 2000 },
+      { id: "after", kind: "scene", title: "等待后的场景", position: { x: 200, y: 0 }, chapterId: "main-story", mediaUrl: "", speaker: "", dialogue: "", showDialogue: false },
     ];
     project.edges = [
       { id: "a", source: "start", sourcePort: "next", target: "wait" },

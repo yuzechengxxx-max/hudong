@@ -2,13 +2,14 @@ import { createStarterProject, type Project, type StoryNode } from "../core/proj
 
 export function createLargeProject(count: number): Project {
   const base = createStarterProject();
-  const nodes: StoryNode[] = [{ id: "start", kind: "start", title: "故事入口", position: { x: 0, y: 0 } }];
+  const nodes: StoryNode[] = [{ id: "start", kind: "start", title: "故事入口", position: { x: 0, y: 0 }, chapterId: "main-story" }];
   for (let index = 1; index < count; index += 1) {
     nodes.push({
       id: `scene-${index}`,
       kind: "scene",
       title: `场景 ${index}`,
       position: { x: (index % 20) * 240, y: Math.floor(index / 20) * 170 },
+      chapterId: "main-story",
       mediaUrl: "",
       speaker: "",
       dialogue: "",

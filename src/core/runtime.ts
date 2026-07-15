@@ -30,7 +30,7 @@ export function createRuntime(project: Project, options: RuntimeOptions = {}) {
   };
   const random = options.random ?? Math.random;
   const nodes = new Map(project.nodes.map(node => [node.id, node]));
-  const chapters = new Map(project.nodes.flatMap(node => node.kind === "chapter" ? [[node.chapterId, node.id] as const] : []));
+  const chapters = new Map(project.nodes.flatMap(node => node.kind === "chapter" ? [[node.anchorId, node.id] as const] : []));
   const targets = new Map(project.edges.map(edge => [`${edge.source}:${edge.sourcePort}`, edge.target]));
   const target = (source: string, port: string) => targets.get(`${source}:${port}`) ?? null;
 
@@ -53,8 +53,8 @@ export function createRuntime(project: Project, options: RuntimeOptions = {}) {
 
     if (node.kind === "start" || node.kind === "chapter") return move(target(node.id, "next"), depth + 1);
     if (node.kind === "jump") {
-      const chapterNodeId = chapters.get(node.chapterId);
-      return chapterNodeId ? move(chapterNodeId, depth + 1) : fail("missing-jump-target", `找不到章节：${node.chapterId}`, node.id);
+      const chapterNodeId = node.targetType === "anchor" ? chapters.get(node.targetId) : project.chapters.find(chapter => chapter.id === node.targetId)?.entryNodeId;
+      return chapterNodeId ? move(chapterNodeId, depth + 1) : fail("missing-jump-target", `找不到章节：${node.targetId}`, node.id);
     }
     if (node.kind === "setVariable") {
       const nextValue = applyVariableOperation(state.variables[node.variableId], node.operation, node.value);

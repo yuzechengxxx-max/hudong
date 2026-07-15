@@ -5,7 +5,7 @@ import { createStarterProject } from "./project";
 describe("project diagnostics", () => {
   it("finds unreachable nodes", () => {
     const project = createStarterProject();
-    project.nodes.push({ id: "orphan", kind: "ending", title: "孤立结局", endingTitle: "孤立结局", position: { x: 0, y: 0 } });
+    project.nodes.push({ id: "orphan", kind: "ending", title: "孤立结局", endingTitle: "孤立结局", position: { x: 0, y: 0 }, chapterId: "main-story" });
     expect(diagnoseProject(project)).toContainEqual(expect.objectContaining({ code: "unreachable-node", nodeId: "orphan" }));
   });
 
@@ -18,9 +18,9 @@ describe("project diagnostics", () => {
   it("reports missing jump targets and duplicate chapters", () => {
     const project = createStarterProject();
     project.nodes.push(
-      { id: "jump", kind: "jump", title: "跳转", position: { x: 0, y: 0 }, chapterId: "missing" },
-      { id: "chapter-a", kind: "chapter", title: "第一章 A", position: { x: 0, y: 0 }, chapterId: "chapter-1" },
-      { id: "chapter-b", kind: "chapter", title: "第一章 B", position: { x: 0, y: 0 }, chapterId: "chapter-1" },
+      { id: "jump", kind: "jump", title: "跳转", position: { x: 0, y: 0 }, chapterId: "main-story", targetType: "anchor", targetId: "missing" },
+      { id: "chapter-a", kind: "chapter", title: "第一章 A", position: { x: 0, y: 0 }, chapterId: "main-story", anchorId: "chapter-1" },
+      { id: "chapter-b", kind: "chapter", title: "第一章 B", position: { x: 0, y: 0 }, chapterId: "main-story", anchorId: "chapter-1" },
     );
     const issues = diagnoseProject(project);
     expect(issues).toContainEqual(expect.objectContaining({ code: "missing-jump-target", nodeId: "jump" }));
@@ -31,8 +31,8 @@ describe("project diagnostics", () => {
     const project = createStarterProject();
     project.variables.push({ id: "name", name: "姓名", type: "string", initialValue: "林夏" });
     project.nodes.push(
-      { id: "missing-var", kind: "condition", title: "未知变量", position: { x: 0, y: 0 }, variableId: "missing", operator: "eq", value: 1 },
-      { id: "bad-operation", kind: "setVariable", title: "错误运算", position: { x: 0, y: 0 }, variableId: "name", operation: "multiply", value: 2 },
+      { id: "missing-var", kind: "condition", title: "未知变量", position: { x: 0, y: 0 }, chapterId: "main-story", variableId: "missing", operator: "eq", value: 1 },
+      { id: "bad-operation", kind: "setVariable", title: "错误运算", position: { x: 0, y: 0 }, chapterId: "main-story", variableId: "name", operation: "multiply", value: 2 },
     );
     const issues = diagnoseProject(project);
     expect(issues).toContainEqual(expect.objectContaining({ code: "missing-variable", nodeId: "missing-var" }));
@@ -43,8 +43,8 @@ describe("project diagnostics", () => {
     const project = createStarterProject();
     project.assets.push({ id: "poster", name: "海报", type: "image/png", size: 1, url: "poster.png" });
     project.nodes.push(
-      { id: "music", kind: "music", title: "音乐", position: { x: 0, y: 0 }, action: "play", assetId: "missing", volume: 1 },
-      { id: "sound", kind: "sound", title: "音效", position: { x: 0, y: 0 }, assetId: "poster", volume: 1 },
+      { id: "music", kind: "music", title: "音乐", position: { x: 0, y: 0 }, chapterId: "main-story", action: "play", assetId: "missing", volume: 1 },
+      { id: "sound", kind: "sound", title: "音效", position: { x: 0, y: 0 }, chapterId: "main-story", assetId: "poster", volume: 1 },
     );
     const issues = diagnoseProject(project);
     expect(issues).toContainEqual(expect.objectContaining({ code: "missing-asset", nodeId: "music" }));
@@ -54,9 +54,9 @@ describe("project diagnostics", () => {
   it("reports invalid weights, durations, and division by zero", () => {
     const project = createStarterProject();
     project.nodes.push(
-      { id: "random", kind: "random", title: "随机", position: { x: 0, y: 0 }, branches: [{ id: "a", label: "A", weight: 0 }, { id: "b", label: "B", weight: 1 }] },
-      { id: "wait", kind: "wait", title: "等待", position: { x: 0, y: 0 }, durationMs: 0 },
-      { id: "divide", kind: "setVariable", title: "除法", position: { x: 0, y: 0 }, variableId: "affection", operation: "divide", value: 0 },
+      { id: "random", kind: "random", title: "随机", position: { x: 0, y: 0 }, chapterId: "main-story", branches: [{ id: "a", label: "A", weight: 0 }, { id: "b", label: "B", weight: 1 }] },
+      { id: "wait", kind: "wait", title: "等待", position: { x: 0, y: 0 }, chapterId: "main-story", durationMs: 0 },
+      { id: "divide", kind: "setVariable", title: "除法", position: { x: 0, y: 0 }, chapterId: "main-story", variableId: "affection", operation: "divide", value: 0 },
     );
     const issues = diagnoseProject(project);
     expect(issues).toContainEqual(expect.objectContaining({ code: "invalid-random-weight", nodeId: "random" }));

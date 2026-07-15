@@ -226,8 +226,8 @@ function summary(node: StoryNode) {
   if (node.kind === "wait") return `等待 ${node.durationMs / 1000} 秒`;
   if (node.kind === "music") return node.action === "play" ? "播放背景音乐" : node.action === "stop" ? "停止背景音乐" : "淡出背景音乐";
   if (node.kind === "sound") return "播放一次音效";
-  if (node.kind === "chapter") return node.chapterId;
-  if (node.kind === "jump") return `前往 ${node.chapterId}`;
+  if (node.kind === "chapter") return node.anchorId;
+  if (node.kind === "jump") return `前往 ${node.targetId}`;
   if (node.kind === "ending") return node.endingTitle;
   return "故事起点";
 }

@@ -37,8 +37,8 @@ export function diagnoseProject(project: Project): DiagnosticIssue[] {
   const chapters = new Map<string, StoryNode & { kind: "chapter" }>();
   for (const node of project.nodes) {
     if (node.kind !== "chapter") continue;
-    if (chapters.has(node.chapterId)) issues.push({ code: "duplicate-chapter", severity: "error", message: `章节标识“${node.chapterId}”重复`, nodeId: node.id });
-    else chapters.set(node.chapterId, node);
+    if (chapters.has(node.anchorId)) issues.push({ code: "duplicate-chapter", severity: "error", message: `章节标识“${node.anchorId}”重复`, nodeId: node.id });
+    else chapters.set(node.anchorId, node);
   }
 
   const visited = new Set<string>();
@@ -50,7 +50,7 @@ export function diagnoseProject(project: Project): DiagnosticIssue[] {
     const node = project.nodes.find(item => item.id === id);
     outgoing.get(id)?.forEach(target => queue.push(target));
     if (node?.kind === "jump") {
-      const chapter = chapters.get(node.chapterId);
+      const chapter = chapters.get(node.targetId);
       if (chapter) queue.push(chapter.id);
     }
   }
@@ -72,8 +72,8 @@ function validateNode(
   chapters: Map<string, StoryNode & { kind: "chapter" }>,
   issues: DiagnosticIssue[],
 ) {
-  if (node.kind === "jump" && !chapters.has(node.chapterId)) {
-    issues.push({ code: "missing-jump-target", severity: "error", message: `找不到章节“${node.chapterId}”`, nodeId: node.id });
+  if (node.kind === "jump" && node.targetType === "anchor" && !chapters.has(node.targetId)) {
+    issues.push({ code: "missing-jump-target", severity: "error", message: `找不到章节“${node.targetId}”`, nodeId: node.id });
   }
   if (node.kind === "condition" || node.kind === "setVariable") {
     const variable = variables.get(node.variableId);

@@ -18,8 +18,8 @@ describe("story runtime", () => {
   it("executes variable and condition nodes before yielding", () => {
     const project = createStarterProject();
     project.nodes.push(
-      { id: "set-clue", kind: "setVariable", title: "获得线索", position: { x: 0, y: 0 }, variableId: "affection", operation: "add", value: 3 },
-      { id: "check-clue", kind: "condition", title: "检查线索", position: { x: 0, y: 0 }, variableId: "affection", operator: "gte", value: 3 },
+      { id: "set-clue", kind: "setVariable", title: "获得线索", position: { x: 0, y: 0 }, chapterId: "main-story", variableId: "affection", operation: "add", value: 3 },
+      { id: "check-clue", kind: "condition", title: "检查线索", position: { x: 0, y: 0 }, chapterId: "main-story", variableId: "affection", operator: "gte", value: 3 },
     );
     project.edges = [
       { id: "a", source: "start", sourcePort: "next", target: "set-clue" },
@@ -34,7 +34,7 @@ describe("story runtime", () => {
   it("selects a weighted random output using the injected source", () => {
     const project = graph([
       start(),
-      { id: "random", kind: "random", title: "抽签", position: at(1), branches: [{ id: "a", label: "A", weight: 1 }, { id: "b", label: "B", weight: 3 }] },
+      { id: "random", kind: "random", title: "抽签", position: at(1), chapterId: "main-story", branches: [{ id: "a", label: "A", weight: 1 }, { id: "b", label: "B", weight: 3 }] },
       ending("ending-a"),
       ending("ending-b"),
     ], [edge("start", "next", "random"), edge("random", "a", "ending-a"), edge("random", "b", "ending-b")]);
@@ -45,7 +45,7 @@ describe("story runtime", () => {
   it("waits until resume is explicitly requested", () => {
     const project = graph([
       start(),
-      { id: "pause", kind: "wait", title: "停顿", position: at(1), durationMs: 2000 },
+      { id: "pause", kind: "wait", title: "停顿", position: at(1), chapterId: "main-story", durationMs: 2000 },
       scene("scene-after"),
     ], [edge("start", "next", "pause"), edge("pause", "next", "scene-after")]);
     const runtime = createRuntime(project);
@@ -56,7 +56,7 @@ describe("story runtime", () => {
   it("takes the timeout port of a timed choice", () => {
     const project = graph([
       start(),
-      { id: "urgent", kind: "timedChoice", title: "快选", position: at(1), prompt: "决定", durationMs: 3000, choices: [{ id: "stay", label: "留下" }] },
+      { id: "urgent", kind: "timedChoice", title: "快选", position: at(1), chapterId: "main-story", prompt: "决定", durationMs: 3000, choices: [{ id: "stay", label: "留下" }] },
       ending("stay-ending"),
       ending("timeout-ending"),
     ], [edge("start", "next", "urgent"), edge("urgent", "stay", "stay-ending"), edge("urgent", "timeout", "timeout-ending")]);
@@ -68,8 +68,8 @@ describe("story runtime", () => {
   it("jumps to a chapter and continues from its output", () => {
     const project = graph([
       start(),
-      { id: "jump", kind: "jump", title: "跳到第二章", position: at(1), chapterId: "chapter-2" },
-      { id: "chapter-node", kind: "chapter", title: "第二章", position: at(2), chapterId: "chapter-2" },
+      { id: "jump", kind: "jump", title: "跳到第二章", position: at(1), chapterId: "main-story", targetType: "anchor", targetId: "chapter-2" },
+      { id: "chapter-node", kind: "chapter", title: "第二章", position: at(2), chapterId: "main-story", anchorId: "chapter-2" },
       ending("chapter-ending"),
     ], [edge("start", "next", "jump"), edge("chapter-node", "next", "chapter-ending")]);
     expect(createRuntime(project).start()).toMatchObject({ currentNodeId: "chapter-ending", status: "ended" });
@@ -96,8 +96,8 @@ describe("story runtime", () => {
   it("emits and consumes audio effects without browser APIs", () => {
     const project = graph([
       start(),
-      { id: "music", kind: "music", title: "播放音乐", position: at(1), action: "play", assetId: "music-1", volume: 0.8 },
-      { id: "sound", kind: "sound", title: "播放音效", position: at(2), assetId: "sound-1", volume: 1 },
+      { id: "music", kind: "music", title: "播放音乐", position: at(1), chapterId: "main-story", action: "play", assetId: "music-1", volume: 0.8 },
+      { id: "sound", kind: "sound", title: "播放音效", position: at(2), chapterId: "main-story", assetId: "sound-1", volume: 1 },
       ending("done"),
     ], [edge("start", "next", "music"), edge("music", "next", "sound"), edge("sound", "next", "done")]);
     const runtime = createRuntime(project);
@@ -116,10 +116,10 @@ describe("story runtime", () => {
 });
 
 const at = (x: number) => ({ x: x * 100, y: 0 });
-const start = (): StoryNode => ({ id: "start", kind: "start", title: "开始", position: at(0) });
-const ending = (id: string): StoryNode => ({ id, kind: "ending", title: id, endingTitle: id, position: at(9) });
-const scene = (id: string): StoryNode => ({ id, kind: "scene", title: id, position: at(8), mediaUrl: "", speaker: "", dialogue: "", showDialogue: false });
-const variableNode = (id: string, variableId: string, operation: "set" | "add" | "subtract" | "multiply" | "divide" | "append" | "toggle", value: string | number | boolean): StoryNode => ({ id, kind: "setVariable", title: id, position: at(2), variableId, operation, value });
+const start = (): StoryNode => ({ id: "start", kind: "start", title: "开始", position: at(0), chapterId: "main-story" });
+const ending = (id: string): StoryNode => ({ id, kind: "ending", title: id, endingTitle: id, position: at(9), chapterId: "main-story" });
+const scene = (id: string): StoryNode => ({ id, kind: "scene", title: id, position: at(8), chapterId: "main-story", mediaUrl: "", speaker: "", dialogue: "", showDialogue: false });
+const variableNode = (id: string, variableId: string, operation: "set" | "add" | "subtract" | "multiply" | "divide" | "append" | "toggle", value: string | number | boolean): StoryNode => ({ id, kind: "setVariable", title: id, position: at(2), chapterId: "main-story", variableId, operation, value });
 const edge = (source: string, sourcePort: string, target: string) => ({ id: `${source}-${sourcePort}`, source, sourcePort, target });
 
 function graph(nodes: StoryNode[], edges: Project["edges"], variables: Project["variables"] = []): Project {
