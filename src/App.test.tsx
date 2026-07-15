@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { App, createPlayableHtml } from "./App";
 import { createStarterProject } from "./core/project";
 import { createLargeProject } from "./test/largeProject";
@@ -260,6 +260,19 @@ describe("editor workbench", () => {
     render(<App />);
     await userEvent.click(screen.getByRole("button", { name: "保存项目" }));
     expect(screen.getByText("已保存 · 刚刚")).toBeVisible();
+  });
+
+  it("restores a saved recovery point after creating a protection point", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<App/>);
+    await userEvent.click(screen.getByRole("button", { name: "保存项目" }));
+    await userEvent.click(screen.getByRole("button", { name: "打开项目" }));
+    const title = screen.getByLabelText("项目名称");
+    await userEvent.clear(title);
+    await userEvent.type(title, "恢复前修改");
+    await userEvent.click(await screen.findByRole("button", { name: "恢复此版本" }));
+    expect(await screen.findByLabelText("项目名称")).toHaveValue("雾港来信");
+    expect(screen.getByText("恢复前保护")).toBeVisible();
   });
 
   it("exposes save state on the save control", async () => {
