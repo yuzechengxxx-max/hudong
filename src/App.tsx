@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Download, FileJson, Film, Image as ImageIcon, Maximize2, Minus, Music, Play, Plus, RotateCcw, Save, Search, Settings, Trash2, Upload, X } from "lucide-react";
 import { diagnoseProject } from "./core/diagnostics";
 import { createNode, createStarterProject, ProjectSchema, type NodeKind, type Project, type StoryNode } from "./core/project";
+import { getNodeDefinition } from "./core/nodeRegistry";
 import { createRuntime, type RuntimeSnapshot } from "./core/runtime";
 import { ResizeHandle } from "./editor/ResizeHandle";
 import { StoryGraph } from "./editor/StoryGraph";
@@ -14,8 +15,6 @@ import { useEditorTheme } from "./editor/theme";
 import { calculateLeftPanelResize, type PanelResizeStart } from "./editor/panelResize";
 
 type Tab = "nodes" | "assets" | "project";
-const labels: Record<NodeKind, string> = { start: "故事入口", scene: "视频场景", choice: "玩家选择", condition: "条件判断", setVariable: "修改变量", ending: "故事结局" };
-const colors: Record<NodeKind, string> = { start: "#83909c", scene: "#4b8fac", choice: "#d1a83d", condition: "#54a77b", setVariable: "#bd6d6d", ending: "#d46f48" };
 
 function loadInitialProject() {
   try { const saved = localStorage.getItem("flowfilm-project"); return saved ? ProjectSchema.parse(JSON.parse(saved)) : createStarterProject(); }
@@ -222,7 +221,7 @@ export function App() {
 }
 
 function NodeLibrary({ onAdd }: { onAdd(kind: Exclude<NodeKind, "start">): void }) { return <><label className="search"><Search size={14}/><input aria-label="搜索节点" placeholder="搜索节点类型"/></label><section className="library-group"><h3>叙事</h3><LibraryButton kind="scene" onAdd={onAdd}/><LibraryButton kind="choice" onAdd={onAdd}/></section><section className="library-group"><h3>逻辑</h3><LibraryButton kind="condition" onAdd={onAdd}/><LibraryButton kind="setVariable" onAdd={onAdd}/><LibraryButton kind="ending" onAdd={onAdd}/></section><button className="add-node" onClick={() => onAdd("choice")}><Plus size={15}/> 添加玩家选择</button></>; }
-function LibraryButton({ kind, onAdd }: { kind: Exclude<NodeKind, "start">; onAdd(kind: Exclude<NodeKind, "start">): void }) { return <button onClick={() => onAdd(kind)}><i style={{ background: colors[kind] }}/>{labels[kind]}</button>; }
+function LibraryButton({ kind, onAdd }: { kind: Exclude<NodeKind, "start">; onAdd(kind: Exclude<NodeKind, "start">): void }) { const definition = getNodeDefinition(kind); return <button onClick={() => onAdd(kind)}><i style={{ background: definition.color }}/>{definition.label}</button>; }
 function AssetLibrary({ project, onImport, onRemove }: { project: Project; onImport(file?: File): void; onRemove(id: string): void }) {
   const [query, setQuery] = useState("");
   const [type, setType] = useState("all");
@@ -286,7 +285,7 @@ function PreviewDock({ project, node, state, onAdvance, onChoose, onRestart, onE
       {node?.kind === "ending" && <div className="ending-screen"><small>结局达成</small><h2>{node.endingTitle}</h2><button onClick={onRestart}><RotateCcw size={14}/> 重新试玩</button></div>}
       {state.status === "error" && <div className="ending-screen"><AlertTriangle/><h2>剧情连接异常</h2><p>请检查当前节点的出口。</p></div>}
     </div>
-    <footer><Play size={13}/><span>{state.status === "ended" ? "播放结束" : labels[node?.kind ?? "start"]}</span><span className="top-spacer"/>已访问 {state.visitedNodeIds.length} 个节点</footer>
+    <footer><Play size={13}/><span>{state.status === "ended" ? "播放结束" : getNodeDefinition(node?.kind ?? "start").label}</span><span className="top-spacer"/>已访问 {state.visitedNodeIds.length} 个节点</footer>
   </section>;
 }
 function Modal({ title, onClose, wide, children }: { title: string; onClose(): void; wide?: boolean; children: React.ReactNode }) { return <div className="modal-backdrop"><section className={`modal ${wide ? "wide" : ""}`}><header><h2>{title}</h2><button aria-label="关闭" onClick={onClose}><X size={18}/></button></header><div className="modal-body">{children}</div></section></div>; }

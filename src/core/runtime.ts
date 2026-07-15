@@ -1,4 +1,4 @@
-import type { Project, StoryNode } from "./project";
+import type { ComparisonOperator, Project, StoryNode } from "./project";
 
 export interface RuntimeSnapshot { currentNodeId: string | null; variables: Record<string, string | number | boolean>; visitedNodeIds: string[]; status: "idle" | "playing" | "awaiting-choice" | "ended" | "error"; }
 
@@ -6,7 +6,16 @@ export function createRuntime(project: Project) {
   let state: RuntimeSnapshot = { currentNodeId: null, variables: Object.fromEntries(project.variables.map(v => [v.id, v.initialValue])), visitedNodeIds: [], status: "idle" };
   const nodes = new Map(project.nodes.map(node => [node.id, node]));
   const target = (source: string, port: string) => project.edges.find(edge => edge.source === source && edge.sourcePort === port)?.target ?? null;
-  const compare = (left: string | number | boolean, operator: "eq" | "gte" | "lte", right: string | number | boolean) => operator === "eq" ? left === right : operator === "gte" ? Number(left) >= Number(right) : Number(left) <= Number(right);
+  const compare = (left: string | number | boolean, operator: ComparisonOperator, right: string | number | boolean) => {
+    if (operator === "eq") return left === right;
+    if (operator === "neq") return left !== right;
+    if (operator === "contains") return String(left).includes(String(right));
+    if (operator === "notContains") return !String(left).includes(String(right));
+    if (operator === "gt") return Number(left) > Number(right);
+    if (operator === "gte") return Number(left) >= Number(right);
+    if (operator === "lt") return Number(left) < Number(right);
+    return Number(left) <= Number(right);
+  };
 
   function move(targetId: string | null, depth = 0): RuntimeSnapshot {
     if (depth > 1000) return state = { ...state, status: "error" };

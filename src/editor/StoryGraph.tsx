@@ -3,9 +3,8 @@ import { Background, ConnectionMode, Controls, Handle, MiniMap, Position, ReactF
 import "@xyflow/react/dist/style.css";
 import { EyeOff, Grid3X3, Map as MapIcon } from "lucide-react";
 import type { NodeKind, Project, StoryNode } from "../core/project";
+import { getNodeDefinition } from "../core/nodeRegistry";
 
-const colors: Record<StoryNode["kind"], string> = { start: "#83909c", scene: "#4b8fac", choice: "#d1a83d", condition: "#54a77b", setVariable: "#bd6d6d", ending: "#d46f48" };
-const labels: Record<StoryNode["kind"], string> = { start: "故事入口", scene: "视频场景", choice: "玩家选择", condition: "条件判断", setVariable: "修改变量", ending: "故事结局" };
 type GraphData = { story: StoryNode; asset?: Project["assets"][number] };
 
 export function mergeSelection(initialIds: string[], hitIds: string[], additive: boolean) {
@@ -20,11 +19,12 @@ export function preserveAdditiveSelection<T extends { type: string; id?: string;
 
 const StoryNodeView = memo(function StoryNodeView({ data, selected }: NodeProps<Node<GraphData>>) {
   const story = data.story;
+  const definition = getNodeDefinition(story.kind);
   const mediaOffset = story.kind === "scene" && data.asset ? 58 : 0;
   const handles = story.kind === "choice" ? story.choices.map((choice, index) => ({ id: choice.id, label: choice.label, top: 68 + index * 25 })) : story.kind === "condition" ? [{ id: "true", label: "成立", top: 70 }, { id: "false", label: "不成立", top: 96 }] : story.kind === "ending" ? [] : [{ id: "next", label: "下一步", top: 72 + mediaOffset }];
-  return <div className={`graph-node ${selected ? "selected" : ""} ${data.asset ? "has-media" : ""}`} data-kind={story.kind} style={{ "--node-color": colors[story.kind], minHeight: Math.max(104 + mediaOffset, 70 + handles.length * 25) } as React.CSSProperties}>
+  return <div className={`graph-node ${selected ? "selected" : ""} ${data.asset ? "has-media" : ""}`} data-kind={story.kind} style={{ "--node-color": definition.color, minHeight: Math.max(104 + mediaOffset, 70 + handles.length * 25) } as React.CSSProperties}>
     <Handle type="target" position={Position.Left} id="input" className="graph-handle input"/>
-    <div className="graph-node-body" aria-label={story.title} role="button" tabIndex={0}><span>{labels[story.kind]}</span><strong>{story.title}</strong><small>{summary(story)}</small></div>
+    <div className="graph-node-body" aria-label={story.title} role="button" tabIndex={0}><span>{definition.label}</span><strong>{story.title}</strong><small>{summary(story)}</small></div>
     {story.kind === "scene" && data.asset && <div className="graph-node-media">{data.asset.type.startsWith("image/") ? <img className="contain-media" src={data.asset.url} alt={data.asset.name}/> : data.asset.type.startsWith("video/") ? <video className="contain-media" src={data.asset.url} aria-label={data.asset.name} muted preload="metadata"/> : <span>{data.asset.name}</span>}</div>}
     {handles.map(handle => <div className="output-row" key={handle.id} style={{ top: handle.top }}><em>{handle.label}</em><Handle type="source" position={Position.Right} id={handle.id} className="graph-handle output"/></div>)}
   </div>;
@@ -201,12 +201,12 @@ function GraphInner({ project, selectedIds, overlay, onSelect, onMove, onCreate,
       attributionPosition="bottom-left"
     >
       {gridVisible && <Background color="var(--ff-canvas-dot)" gap={22} size={1.4}/>} 
-      {minimapVisible && <div className="graph-minimap-wrap" data-testid="graph-minimap"><MiniMap style={{ width: 140, height: 96 }} pannable zoomable nodeStrokeWidth={3} nodeColor={node => colors[(node.data as GraphData).story.kind]}/><button className="minimap-toggle" title="隐藏小地图" aria-label="隐藏小地图" onClick={onToggleMinimap}><EyeOff size={13}/></button></div>}
+      {minimapVisible && <div className="graph-minimap-wrap" data-testid="graph-minimap"><MiniMap style={{ width: 140, height: 96 }} pannable zoomable nodeStrokeWidth={3} nodeColor={node => getNodeDefinition((node.data as GraphData).story.kind).color}/><button className="minimap-toggle" title="隐藏小地图" aria-label="隐藏小地图" onClick={onToggleMinimap}><EyeOff size={13}/></button></div>}
       <Controls showInteractive={false}/>
       {overlay}
       <div className="graph-toolbar"><button title="Fit view" aria-label="适应视图" onClick={() => api.fitView({ duration: 250, padding: 0.2 })}>适应画布</button><button className="grid-toggle" data-active={gridVisible || undefined} aria-pressed={gridVisible} title={gridVisible ? "隐藏点阵" : "显示点阵"} aria-label={gridVisible ? "隐藏点阵" : "显示点阵"} onClick={onToggleGrid}><Grid3X3 size={14}/></button></div>
       {!minimapVisible && <button className="minimap-toggle minimap-toggle-standalone" title="显示小地图" aria-label="显示小地图" onClick={onToggleMinimap}><MapIcon size={14}/></button>}
-      {menu && <div className="node-create-menu nodrag nopan nowheel" style={{ left: menu.x, top: menu.y }}><b>创建节点</b>{(["scene","choice","condition","setVariable","ending"] as const).map(kind => <button key={kind} onClick={() => { onCreate(kind, menu.flowX, menu.flowY); setMenu(undefined); }}><i style={{ background: colors[kind] }}/>{labels[kind]}</button>)}</div>}
+      {menu && <div className="node-create-menu nodrag nopan nowheel" style={{ left: menu.x, top: menu.y }}><b>创建节点</b>{(["scene","choice","condition","setVariable","ending"] as const).map(kind => { const definition = getNodeDefinition(kind); return <button key={kind} onClick={() => { onCreate(kind, menu.flowX, menu.flowY); setMenu(undefined); }}><i style={{ background: definition.color }}/>{definition.label}</button>; })}</div>}
       {edgeMenu && <div className="node-create-menu edge-context-menu nodrag nopan nowheel" style={{ left: edgeMenu.x, top: edgeMenu.y }}><b>连接操作</b><button onClick={() => { onDeleteEdges([edgeMenu.id]); setSelectedEdgeIds([]); setEdgeMenu(undefined); }}>断开连接</button></div>}
     </ReactFlow>
   </div>;

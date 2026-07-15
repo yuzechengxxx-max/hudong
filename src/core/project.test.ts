@@ -3,7 +3,7 @@ import { ProjectSchema, createNode, createStarterProject } from "./project";
 
 describe("ProjectSchema", () => {
   it("accepts a starter project", () => {
-    expect(ProjectSchema.parse(createStarterProject()).schemaVersion).toBe(1);
+    expect(ProjectSchema.parse(createStarterProject()).schemaVersion).toBe(2);
   });
 
   it("rejects incomplete edges", () => {
@@ -36,5 +36,21 @@ describe("ProjectSchema", () => {
   it("preserves customized display settings", () => {
     const project = { ...createStarterProject(), display: { aspectRatio: "21:9", width: 2560, height: 1080 } };
     expect(ProjectSchema.parse(project).display).toEqual(project.display);
+  });
+
+  it("creates complete defaults for every phase-one node", () => {
+    const kinds = ["scene", "choice", "timedChoice", "condition", "setVariable", "random", "wait", "music", "sound", "chapter", "jump", "ending"] as const;
+    const project = createStarterProject();
+    const nodes = kinds.map((kind, index) => createNode(kind, index));
+    expect(() => ProjectSchema.parse({ ...project, nodes: [project.nodes[0], ...nodes] })).not.toThrow();
+  });
+
+  it("accepts the expanded comparison and variable operations", () => {
+    const project = createStarterProject();
+    project.nodes.push(
+      { id: "contains", kind: "condition", title: "检查文本", position: { x: 0, y: 0 }, variableId: "affection", operator: "notContains", value: "秘密" },
+      { id: "multiply", kind: "setVariable", title: "翻倍", position: { x: 0, y: 0 }, variableId: "affection", operation: "multiply", value: 2 },
+    );
+    expect(() => ProjectSchema.parse(project)).not.toThrow();
   });
 });
