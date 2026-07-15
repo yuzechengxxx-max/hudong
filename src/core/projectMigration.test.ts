@@ -52,7 +52,7 @@ describe("project migration", () => {
     const legacy = createLegacyV2Fixture();
     const migrated = loadProject(legacy);
     expect(migrated.schemaVersion).toBe(3);
-    expect(migrated.chapters).toEqual([{ id: "main-story", name: "Main Story", order: 0, entryNodeId: "start" }]);
+    expect(migrated.chapters).toEqual([{ id: "main-story", name: "主剧情", order: 0, entryNodeId: "start" }]);
     expect(migrated.nodes.every(node => node.chapterId === "main-story")).toBe(true);
     expect(migrated.nodes.map(node => [node.id, node.position])).toEqual(legacy.nodes.map(node => [node.id, node.position]));
     expect(migrated.edges).toEqual(legacy.edges);

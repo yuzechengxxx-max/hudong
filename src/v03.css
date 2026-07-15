@@ -339,6 +339,26 @@ body,
   background: #d99412 !important;
 }
 
+.chapter-manager { display: grid; gap: 9px; }
+.chapter-manager-heading { display: flex; align-items: center; justify-content: space-between; color: var(--ff-muted); font-size: 11px; }
+.chapter-list { display: grid; gap: 4px; }
+.chapter-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; border: 1px solid transparent; border-radius: 6px; background: var(--ff-control-bg); }
+.chapter-row:hover { border-color: var(--ff-border); background: var(--ff-control-hover); }
+.chapter-row.active { border-color: color-mix(in srgb, var(--ff-accent) 48%, var(--ff-border)); background: color-mix(in srgb, var(--ff-accent) 10%, var(--ff-control-bg)); }
+.chapter-main { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 7px; padding: 8px 9px; border: 0; background: transparent; color: var(--ff-text); text-align: left; }
+.chapter-main > span { min-width: 0; display: flex; align-items: center; gap: 6px; }
+.chapter-main b { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.chapter-main small { color: var(--ff-accent); font-size: 9px; }
+.chapter-main em { color: var(--ff-muted); font-size: 10px; font-style: normal; white-space: nowrap; }
+.chapter-main .chapter-issues { color: #d98632; }
+.chapter-actions { display: flex; padding-right: 5px; opacity: 0; transition: opacity 120ms ease; }
+.chapter-row:hover .chapter-actions, .chapter-row:focus-within .chapter-actions, .chapter-row.active .chapter-actions { opacity: 1; }
+.chapter-actions button { width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--ff-muted); }
+.chapter-actions button:hover:not(:disabled) { background: var(--ff-control-pressed); color: var(--ff-text); }
+.chapter-actions button:disabled { opacity: .28; }
+.project-workspace { display: grid; align-content: start; gap: 18px; }
+.project-workspace > .side-panel { padding: 0; }
+
 @supports not (backdrop-filter: blur(1px)) {
   .glass-panel,
   .workspace-drawer,

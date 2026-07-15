@@ -30,7 +30,7 @@ function migrateV2ToV3(input: VersionedProject): unknown {
     ...migrated,
     schemaVersion: 3,
     nodes,
-    chapters: [{ id: "main-story", name: "Main Story", order: 0, entryNodeId }],
+    chapters: [{ id: "main-story", name: "主剧情", order: 0, entryNodeId }],
     defaultChapterId: "main-story",
   };
 }

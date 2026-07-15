@@ -77,7 +77,7 @@ export function createStarterProject(): Project {
       { id: "choice", kind: "choice", title: "要不要赴约？", position: { x: 515, y: 190 }, chapterId: "main-story", prompt: "你只有几秒作出决定", choices: [{ id: "warehouse", label: "前往旧仓库" }, { id: "call", label: "先联系林夏" }] },
       { id: "ending", kind: "ending", title: "黎明之前", position: { x: 760, y: 115 }, chapterId: "main-story", endingTitle: "未完的来信" },
     ],
-    chapters: [{ id: "main-story", name: "Main Story", order: 0, entryNodeId: "start" }],
+    chapters: [{ id: "main-story", name: "主剧情", order: 0, entryNodeId: "start" }],
     defaultChapterId: "main-story",
     edges: [
       { id: "e-start", source: "start", sourcePort: "next", target: "opening" },

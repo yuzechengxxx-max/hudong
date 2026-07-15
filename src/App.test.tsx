@@ -13,6 +13,18 @@ describe("editor workbench", () => {
     await userEvent.click(screen.getByRole("button", { name }));
   }
 
+  it("switches independent chapter canvases from the project drawer", async () => {
+    const project = createStarterProject();
+    project.chapters.push({ id: "chapter-two", name: "第二章", order: 1, entryNodeId: "chapter-two-start" });
+    project.nodes.push({ id: "chapter-two-start", kind: "start", title: "第二章开始", position: { x: 0, y: 0 }, chapterId: "chapter-two" });
+    localStorage.setItem("flowfilm-project", JSON.stringify(project));
+    render(<App/>);
+    await userEvent.click(screen.getByRole("button", { name: "打开项目" }));
+    await userEvent.click(screen.getByRole("button", { name: "打开章节 第二章" }));
+    expect(screen.getByTestId("story-graph")).toHaveAttribute("data-chapter-id", "chapter-two");
+    expect(screen.getByText(`${project.title} / 第二章`)).toBeVisible();
+  });
+
   it("renders the glass workbench shell around the graph", () => {
     render(<App />);
     expect(screen.getByTestId("tool-island")).toBeVisible();

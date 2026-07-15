@@ -16,6 +16,8 @@ import { IconButton } from "./editor/ui";
 import { useEditorTheme } from "./editor/theme";
 import { calculateLeftPanelResize, type PanelResizeStart } from "./editor/panelResize";
 import { NodeInspector } from "./editor/NodeInspector";
+import { ChapterManager } from "./editor/ChapterManager";
+import { createChapter, deleteChapter, duplicateChapter, renameChapter, reorderChapter } from "./editor/chapterCommands";
 
 type Tab = "nodes" | "assets" | "project";
 
@@ -27,6 +29,7 @@ function loadInitialProject() {
 export function App() {
   const { preference: themePreference, setPreference: setThemePreference } = useEditorTheme();
   const [project, setProject] = useState<Project>(loadInitialProject);
+  const [activeChapterId, setActiveChapterId] = useState(() => project.defaultChapterId);
   const [tab, setTab] = useState<Tab>("nodes");
   const [selectedIds, setSelectedIds] = useState<string[]>(() => [project.nodes.find(n => n.kind === "choice")?.id ?? project.nodes[0].id]);
   const [drawer, setDrawer] = useState<"assets" | "project" | "settings" | undefined>();
@@ -52,6 +55,8 @@ export function App() {
   const selectedId = selectedIds.at(-1);
   const selected = project.nodes.find(node => node.id === selectedId);
   const issues = useMemo(() => diagnoseProject(project), [project]);
+  const activeChapter = project.chapters.find(chapter => chapter.id === activeChapterId) ?? project.chapters[0];
+  const chapterIssueCounts = useMemo(() => Object.fromEntries(project.chapters.map(chapter => [chapter.id, issues.filter(issue => issue.nodeId && project.nodes.find(node => node.id === issue.nodeId)?.chapterId === chapter.id).length])), [issues, project.chapters, project.nodes]);
   const previewNode = project.nodes.find(node => node.id === runtimeState.currentNodeId);
 
   useEffect(() => {
@@ -89,7 +94,7 @@ export function App() {
     setSelectedIds(ids => ids.filter(id => next.nodes.some(node => node.id === id)));
   }
   function updateSelected(patch: Partial<StoryNode>) { if (!selectedId) return; updateProject(current => ({ ...current, nodes: current.nodes.map(node => node.id === selectedId ? { ...node, ...patch } as StoryNode : node) })); }
-  function addNode(kind: Exclude<NodeKind, "start">, position?: { x: number; y: number }) { const created = createNode(kind, project.nodes.length); const node = position ? { ...created, position } : created; updateProject(current => ({ ...current, nodes: [...current.nodes, node] })); setSelectedIds([node.id]); setTab("nodes"); }
+  function addNode(kind: Exclude<NodeKind, "start">, position?: { x: number; y: number }) { const created = createNode(kind, project.nodes.length, activeChapterId); const node = position ? { ...created, position } : created; updateProject(current => ({ ...current, nodes: [...current.nodes, node] })); setSelectedIds([node.id]); setTab("nodes"); }
   function deleteSelected() { if (!selectedIds.some(id => project.nodes.find(node => node.id === id)?.kind !== "start")) return; updateProject(current => removeSelection(current, selectedIds)); setSelectedIds([]); }
   function moveNode(id: string, x: number, y: number) { updateProject(current => ({ ...current, nodes: current.nodes.map(node => node.id === id ? { ...node, position: { x, y } } : node) })); }
   function attachAsset(assetId: string, targetNodeId: string | undefined, x: number, y: number) {
@@ -100,7 +105,7 @@ export function App() {
       setSelectedIds([targetNodeId]);
       return;
     }
-    const created = createNode("scene", project.nodes.length);
+    const created = createNode("scene", project.nodes.length, activeChapterId);
     const node = { ...created, title: asset.name.replace(/\.[^.]+$/, ""), position: { x, y }, assetId: asset.id, mediaUrl: asset.url };
     updateProject(current => ({ ...current, nodes: [...current.nodes, node] }));
     setSelectedIds([node.id]);
@@ -150,7 +155,7 @@ export function App() {
       if (target instanceof Element && target.matches("input, textarea, select, [contenteditable='true']")) return;
       const command = event.ctrlKey || event.metaKey;
       const key = event.key.toLowerCase();
-      if (command && key === "a") { event.preventDefault(); setSelectedIds(project.nodes.map(node => node.id)); return; }
+      if (command && key === "a") { event.preventDefault(); setSelectedIds(project.nodes.filter(node => node.chapterId === activeChapterId).map(node => node.id)); return; }
       if (event.key === "Escape") { setSelectedIds([]); return; }
       if (command && key === "z") { event.preventDefault(); event.shiftKey ? redo() : undo(); return; }
       if (command && key === "y") { event.preventDefault(); redo(); return; }
@@ -175,6 +180,9 @@ export function App() {
   function exportProject() { download(`${project.title}.flowfilm.json`, JSON.stringify(project, null, 2), "application/json;charset=utf-8"); }
   function exportWeb() { download(`${project.title}.html`, createPlayableHtml(project), "text/html;charset=utf-8"); }
   function importProject(file?: File) { if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const next = loadProject(JSON.parse(String(reader.result))); setProject(next); setSelectedIds([next.nodes[0].id]); restart(); } catch { window.alert("项目文件格式不正确或版本不受支持"); } }; reader.readAsText(file, "utf-8"); }
+  function selectChapter(chapterId: string) { setActiveChapterId(chapterId); setSelectedIds(project.nodes.filter(node => node.chapterId === chapterId).slice(0, 1).map(node => node.id)); }
+  function addChapter() { const result = createChapter(project, `第 ${project.chapters.length + 1} 章`, String(Date.now())); updateProject(() => result.project); setActiveChapterId(result.chapterId); setSelectedIds([result.project.chapters.find(chapter => chapter.id === result.chapterId)!.entryNodeId]); }
+  function removeChapter(chapterId: string) { const chapter = project.chapters.find(item => item.id === chapterId); if (!chapter) return; const nodeCount = project.nodes.filter(node => node.chapterId === chapterId).length; const jumpCount = project.nodes.filter(node => node.kind === "jump" && node.targetType === "chapter" && node.targetId === chapterId).length; if (!window.confirm(`删除“${chapter.name}”？将删除 ${nodeCount} 个节点，并保留 ${jumpCount} 个待修复跳转。`)) return; updateProject(current => deleteChapter(current, chapterId)); if (activeChapterId === chapterId) { setActiveChapterId(project.defaultChapterId); setSelectedIds(project.nodes.filter(node => node.chapterId === project.defaultChapterId).slice(0, 1).map(node => node.id)); } }
   function importAsset(file?: File) {
     if (!file) return;
     const id = `asset-${Date.now()}`;
@@ -186,7 +194,7 @@ export function App() {
 
   return <EditorShell>
     <header className="topbar tool-island glass-panel" data-testid="tool-island">
-      <div className="brand-mark">映流 <span>FlowFilm</span></div><div className="crumb">{project.title} / 主剧情</div><div className="top-spacer" />
+      <div className="brand-mark">映流 <span>FlowFilm</span></div><div className="crumb">{project.title} / {activeChapter?.name}</div><div className="top-spacer" />
       <button className="toolbar-button" aria-label="保存项目" data-state={saveStatus} onClick={() => commitSave(true)}>{saveStatus === "saved" ? <CheckCircle2 size={15}/> : <Save size={15}/>} {saveStatus === "saving" ? "保存中" : saveStatus === "saved" ? "已保存" : saveStatus === "error" ? "保存失败" : "保存"}</button>
       <button className="toolbar-button" onClick={() => setDrawer(value => value === "assets" ? undefined : "assets")}><Upload size={15}/> 素材</button>
       <button className="toolbar-button" onClick={() => setDrawer(value => value === "project" ? undefined : "project")}><FileJson size={15}/> 项目</button>
@@ -215,7 +223,7 @@ export function App() {
         <button className="danger-button" aria-label="删除选中节点" disabled={selected.kind === "start"} onClick={deleteSelected}><Trash2 size={14}/> 删除选中节点</button>
         <div className="theme-section"><h3>游戏 UI</h3><label>强调色<input aria-label="强调色" type="color" value={project.ui.accent} onChange={event => updateProject(current => ({ ...current, ui: { ...current.ui, accent: event.target.value } }))}/></label><label>对话框透明度<input type="range" min="0.3" max="1" step="0.05" value={project.ui.dialogueOpacity} onChange={event => updateProject(current => ({ ...current, ui: { ...current.ui, dialogueOpacity: Number(event.target.value) } }))}/></label></div>
       </> : <div className="inspector-empty"><p>未选择节点</p><small>单击节点查看属性，或双击画布创建节点。</small></div>}</div><InspectorResizeHandle width={rightWidth} height={inspectorHeight} onResize={(nextWidth, nextHeight) => { setRightWidth(nextWidth); setInspectorHeight(nextHeight); }}/></aside>
-      {drawer && <aside className="workspace-drawer" style={{ width: drawerWidth }}><header><b>{drawer === "assets" ? "素材" : drawer === "settings" ? "项目设置" : "项目"}</b><button aria-label="关闭面板" onClick={() => setDrawer(undefined)}><X size={16}/></button></header>{drawer === "assets" ? <AssetLibrary project={project} onImport={importAsset} onRemove={id => updateProject(current => ({ ...current, assets: current.assets.filter(asset => asset.id !== id), nodes: current.nodes.map(node => node.kind === "scene" && node.assetId === id ? { ...node, assetId: undefined, mediaUrl: "" } : node) }))}/> : drawer === "settings" ? <ProjectSettings project={project} onChange={next => updateProject(() => next)} themePreference={themePreference} onThemePreferenceChange={setThemePreference}/> : <ProjectPanel project={project} onTitle={title => updateProject(current => ({ ...current, title }))} onExport={exportProject} onImport={() => importRef.current?.click()} onAddVariable={() => updateProject(current => ({ ...current, variables: [...current.variables, { id: `var-${Date.now()}`, name: "新变量", type: "number", initialValue: 0 }] }))}/>}<div className="drawer-resize" role="separator" aria-label={`调整${drawer === "assets" ? "素材" : drawer === "settings" ? "设置" : "项目"}面板宽度`} onPointerDown={event => { drawerResizeRef.current = { x: event.clientX, width: drawerWidth }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!drawerResizeRef.current || !event.currentTarget.hasPointerCapture(event.pointerId)) return; setDrawerWidth(Math.min(620, Math.max(280, drawerResizeRef.current.width + event.clientX - drawerResizeRef.current.x))); }} onPointerUp={() => { drawerResizeRef.current = undefined; }}/></aside>}
+      {drawer && <aside className="workspace-drawer" style={{ width: drawerWidth }}><header><b>{drawer === "assets" ? "素材" : drawer === "settings" ? "项目设置" : "项目"}</b><button aria-label="关闭面板" onClick={() => setDrawer(undefined)}><X size={16}/></button></header>{drawer === "assets" ? <AssetLibrary project={project} onImport={importAsset} onRemove={id => updateProject(current => ({ ...current, assets: current.assets.filter(asset => asset.id !== id), nodes: current.nodes.map(node => node.kind === "scene" && node.assetId === id ? { ...node, assetId: undefined, mediaUrl: "" } : node) }))}/> : drawer === "settings" ? <ProjectSettings project={project} onChange={next => updateProject(() => next)} themePreference={themePreference} onThemePreferenceChange={setThemePreference}/> : <div className="side-panel project-workspace"><ChapterManager project={project} activeChapterId={activeChapterId} issueCounts={chapterIssueCounts} onSelect={selectChapter} onCreate={addChapter} onRename={(id, name) => updateProject(current => renameChapter(current, id, name))} onDuplicate={id => { const next = duplicateChapter(project, id, String(Date.now())); const chapter = next.chapters.at(-1)!; updateProject(() => next); setActiveChapterId(chapter.id); setSelectedIds([chapter.entryNodeId]); }} onReorder={(id, direction) => updateProject(current => reorderChapter(current, id, direction))} onDelete={removeChapter}/><ProjectPanel project={project} onTitle={title => updateProject(current => ({ ...current, title }))} onExport={exportProject} onImport={() => importRef.current?.click()} onAddVariable={() => updateProject(current => ({ ...current, variables: [...current.variables, { id: `var-${Date.now()}`, name: "新变量", type: "number", initialValue: 0 }] }))}/></div>}<div className="drawer-resize" role="separator" aria-label={`调整${drawer === "assets" ? "素材" : drawer === "settings" ? "设置" : "项目"}面板宽度`} onPointerDown={event => { drawerResizeRef.current = { x: event.clientX, width: drawerWidth }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!drawerResizeRef.current || !event.currentTarget.hasPointerCapture(event.pointerId)) return; setDrawerWidth(Math.min(620, Math.max(280, drawerResizeRef.current.width + event.clientX - drawerResizeRef.current.x))); }} onPointerUp={() => { drawerResizeRef.current = undefined; }}/></aside>}
       <input ref={importRef} hidden type="file" accept=".json,.flowfilm.json" onChange={event => importProject(event.target.files?.[0])}/>
     </main>
     <footer className="statusbar status-float glass-panel" data-testid="status-float"><span className={issues.some(issue => issue.severity === "error") ? "unhealthy" : "healthy"}>{issues.length ? <AlertTriangle size={12}/> : <CheckCircle2 size={12}/>} {issues.length ? `${issues.length} 个问题` : "项目正常"}</span><span>{project.nodes.length} 个节点</span><span>{project.assets.length} 个素材</span><span>{project.variables.length} 个变量</span><span className={`save-state ${saveStatus}`}>{saveStatus === "saving" ? "保存中…" : saveStatus === "error" ? "保存失败" : saveStatus === "saved" ? `已保存 · ${savedAt}` : "有未保存修改"}</span><span className="top-spacer"/><button aria-label="演出时间线" className={timelineOpen ? "active" : ""} onClick={() => setTimelineOpen(value => !value)}>演出时间线</button><button onClick={() => { setLeftWidth(230); setRightWidth(330); setTimelineHeight(190); }}>恢复布局</button></footer>

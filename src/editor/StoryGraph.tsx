@@ -39,6 +39,7 @@ const nodeTypes = { story: StoryNodeView };
 
 type StoryGraphProps = {
   project: Project;
+  activeChapterId?: string;
   selectedIds: string[];
   overlay?: ReactNode;
   onSelect(ids: string[]): void;
@@ -54,6 +55,12 @@ type StoryGraphProps = {
   onToggleGrid?(): void;
 };
 
+export function selectChapterGraph(project: Project, chapterId: string) {
+  const nodes = project.nodes.filter(node => node.chapterId === chapterId);
+  const nodeIds = new Set(nodes.map(node => node.id));
+  return { nodes, edges: project.edges.filter(edge => nodeIds.has(edge.source) && nodeIds.has(edge.target)) };
+}
+
 export function StoryGraph(props: StoryGraphProps) {
   return <ReactFlowProvider><GraphInner {...props}/></ReactFlowProvider>;
 }
@@ -68,13 +75,15 @@ function toEdges(project: Project, selectedIds: string[]): Edge[] {
   return project.edges.map(edge => ({ id: edge.id, source: edge.source, target: edge.target, sourceHandle: edge.sourcePort, targetHandle: "input", type: "default", animated: selected.has(edge.source), style: { stroke: selected.has(edge.source) ? "#f0b429" : "#77818c", strokeWidth: 2 } }));
 }
 
-function GraphInner({ project, selectedIds, overlay, onSelect, onMove, onCreate, onConnect, onDeleteNodes, onDeleteEdges, onAssetDrop, minimapVisible, onToggleMinimap, gridVisible: externalGridVisible, onToggleGrid: externalToggleGrid }: StoryGraphProps) {
+function GraphInner({ project, selectedIds, activeChapterId = project.nodes.find(node => selectedIds.includes(node.id))?.chapterId ?? project.defaultChapterId, overlay, onSelect, onMove, onCreate, onConnect, onDeleteNodes, onDeleteEdges, onAssetDrop, minimapVisible, onToggleMinimap, gridVisible: externalGridVisible, onToggleGrid: externalToggleGrid }: StoryGraphProps) {
   const api = useReactFlow();
+  const chapterGraph = selectChapterGraph(project, activeChapterId);
+  const visibleProject = { ...project, nodes: chapterGraph.nodes, edges: chapterGraph.edges };
   const [localGridVisible, setLocalGridVisible] = useState(() => localStorage.getItem("flowfilm-grid-visible-v2") !== "false");
   const gridVisible = externalGridVisible ?? localGridVisible;
   const onToggleGrid = externalToggleGrid ?? (() => setLocalGridVisible(value => { localStorage.setItem("flowfilm-grid-visible-v2", String(!value)); return !value; }));
-  const [nodes, setNodes, applyNodeChanges] = useNodesState<Node<GraphData>>(toNodes(project, selectedIds));
-  const [edges, setEdges, applyEdgeChanges] = useEdgesState(toEdges(project, selectedIds));
+  const [nodes, setNodes, applyNodeChanges] = useNodesState<Node<GraphData>>(toNodes(visibleProject, selectedIds));
+  const [edges, setEdges, applyEdgeChanges] = useEdgesState(toEdges(visibleProject, selectedIds));
   const [menu, setMenu] = useState<{ x: number; y: number; flowX: number; flowY: number }>();
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [edgeMenu, setEdgeMenu] = useState<{ id: string; x: number; y: number }>();
@@ -82,13 +91,13 @@ function GraphInner({ project, selectedIds, overlay, onSelect, onMove, onCreate,
   const paneGesture = useRef<{ x: number; y: number; moved: boolean; additive: boolean; initialIds: string[] } | undefined>(undefined);
 
   useEffect(() => {
-    setNodes(current => toNodes(project, selectedIds).map(next => {
+    setNodes(current => toNodes(visibleProject, selectedIds).map(next => {
       const existing = current.find(node => node.id === next.id);
       return existing ? { ...next, position: existing.dragging ? existing.position : next.position, selected: next.selected } : next;
     }));
-  }, [project.nodes, project.assets, selectedIds, setNodes]);
+  }, [project.nodes, project.assets, activeChapterId, selectedIds, setNodes]);
 
-  useEffect(() => { setEdges(toEdges(project, selectedIds)); }, [project.edges, selectedIds, setEdges]);
+  useEffect(() => { setEdges(toEdges(visibleProject, selectedIds)); }, [project.edges, activeChapterId, selectedIds, setEdges]);
 
   const onNodesChange = useCallback((changes: NodeChange<Node<GraphData>>[]) => {
     const visibleChanges = preserveAdditiveSelection(changes, paneGesture.current?.initialIds ?? [], paneGesture.current?.additive ?? false);
@@ -132,7 +141,7 @@ function GraphInner({ project, selectedIds, overlay, onSelect, onMove, onCreate,
     return () => graph?.removeEventListener("flowfilm:selection-end", finishTestSelection);
   }, [finishSelection, onSelect, selectedIds]);
 
-  return <div ref={graphRef} className="story-graph" data-testid="story-graph" tabIndex={0} onMouseDownCapture={(event) => startPaneGesture(event.target, event.clientX, event.clientY, event.shiftKey)} onMouseMoveCapture={(event) => movePaneGesture(event.clientX, event.clientY)} onPointerDownCapture={(event) => {
+  return <div ref={graphRef} className="story-graph" data-testid="story-graph" data-chapter-id={activeChapterId} tabIndex={0} onMouseDownCapture={(event) => startPaneGesture(event.target, event.clientX, event.clientY, event.shiftKey)} onMouseMoveCapture={(event) => movePaneGesture(event.clientX, event.clientY)} onPointerDownCapture={(event) => {
     startPaneGesture(event.target, event.clientX, event.clientY, event.shiftKey);
   }} onPointerMoveCapture={(event) => {
     movePaneGesture(event.clientX, event.clientY);
