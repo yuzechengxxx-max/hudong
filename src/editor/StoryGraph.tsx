@@ -65,9 +65,9 @@ function toEdges(project: Project, selectedIds: string[]): Edge[] {
 
 function GraphInner({ project, selectedIds, overlay, onSelect, onMove, onCreate, onConnect, onDeleteNodes, onDeleteEdges, onAssetDrop, minimapVisible, onToggleMinimap, gridVisible: externalGridVisible, onToggleGrid: externalToggleGrid }: StoryGraphProps) {
   const api = useReactFlow();
-  const [localGridVisible, setLocalGridVisible] = useState(() => localStorage.getItem("flowfilm-grid-visible") !== "false");
+  const [localGridVisible, setLocalGridVisible] = useState(() => localStorage.getItem("flowfilm-grid-visible-v2") !== "false");
   const gridVisible = externalGridVisible ?? localGridVisible;
-  const onToggleGrid = externalToggleGrid ?? (() => setLocalGridVisible(value => { localStorage.setItem("flowfilm-grid-visible", String(!value)); return !value; }));
+  const onToggleGrid = externalToggleGrid ?? (() => setLocalGridVisible(value => { localStorage.setItem("flowfilm-grid-visible-v2", String(!value)); return !value; }));
   const [nodes, setNodes, applyNodeChanges] = useNodesState<Node<GraphData>>(toNodes(project, selectedIds));
   const [edges, setEdges, applyEdgeChanges] = useEdgesState(toEdges(project, selectedIds));
   const [menu, setMenu] = useState<{ x: number; y: number; flowX: number; flowY: number }>();
@@ -189,7 +189,6 @@ function GraphInner({ project, selectedIds, overlay, onSelect, onMove, onCreate,
       snapToGrid
       snapGrid={[16,16]}
       panOnDrag={[1, 2]}
-      panOnScroll
       zoomOnScroll
       zoomOnPinch
       panActivationKeyCode="Space"
@@ -201,11 +200,11 @@ function GraphInner({ project, selectedIds, overlay, onSelect, onMove, onCreate,
       zoomOnDoubleClick={false}
       attributionPosition="bottom-left"
     >
-      {gridVisible && <Background color="var(--ff-canvas-dot)" gap={20} size={2}/>} 
+      {gridVisible && <Background color="var(--ff-canvas-dot)" gap={22} size={1.4}/>} 
       {minimapVisible && <div className="graph-minimap-wrap" data-testid="graph-minimap"><MiniMap style={{ width: 140, height: 96 }} pannable zoomable nodeStrokeWidth={3} nodeColor={node => colors[(node.data as GraphData).story.kind]}/><button className="minimap-toggle" title="隐藏小地图" aria-label="隐藏小地图" onClick={onToggleMinimap}><EyeOff size={13}/></button></div>}
       <Controls showInteractive={false}/>
       {overlay}
-      <div className="graph-toolbar"><button title="Fit view" aria-label="适应视图" onClick={() => api.fitView({ duration: 250, padding: 0.2 })}>适应画布</button><button title={gridVisible ? "隐藏点阵" : "显示点阵"} aria-label={gridVisible ? "隐藏点阵" : "显示点阵"} onClick={onToggleGrid}>{gridVisible ? <Grid3X3 size={14}/> : <Grid3X3 size={14}/>}</button></div>
+      <div className="graph-toolbar"><button title="Fit view" aria-label="适应视图" onClick={() => api.fitView({ duration: 250, padding: 0.2 })}>适应画布</button><button className="grid-toggle" data-active={gridVisible || undefined} aria-pressed={gridVisible} title={gridVisible ? "隐藏点阵" : "显示点阵"} aria-label={gridVisible ? "隐藏点阵" : "显示点阵"} onClick={onToggleGrid}><Grid3X3 size={14}/></button></div>
       {!minimapVisible && <button className="minimap-toggle minimap-toggle-standalone" title="显示小地图" aria-label="显示小地图" onClick={onToggleMinimap}><MapIcon size={14}/></button>}
       {menu && <div className="node-create-menu nodrag nopan nowheel" style={{ left: menu.x, top: menu.y }}><b>创建节点</b>{(["scene","choice","condition","setVariable","ending"] as const).map(kind => <button key={kind} onClick={() => { onCreate(kind, menu.flowX, menu.flowY); setMenu(undefined); }}><i style={{ background: colors[kind] }}/>{labels[kind]}</button>)}</div>}
       {edgeMenu && <div className="node-create-menu edge-context-menu nodrag nopan nowheel" style={{ left: edgeMenu.x, top: edgeMenu.y }}><b>连接操作</b><button onClick={() => { onDeleteEdges([edgeMenu.id]); setSelectedEdgeIds([]); setEdgeMenu(undefined); }}>断开连接</button></div>}

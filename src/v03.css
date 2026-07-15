@@ -188,6 +188,7 @@ body,
   height: 30px;
 }
 .graph-toolbar { left: 54px !important; bottom: 54px !important; }
+.graph-toolbar .grid-toggle[data-active="true"] { color: var(--accent) !important; background: color-mix(in srgb, var(--accent) 16%, var(--ff-glass-solid)) !important; }
 .react-flow__controls { left: 12px !important; bottom: 54px !important; }
 
 .inspector-float .panel-resize {
@@ -273,6 +274,37 @@ body,
 }
 
 [data-theme="dark"] .react-flow__background pattern circle { fill: #637f93 !important; }
+
+/* Keep legacy hard-coded controls coherent with the light theme. */
+[data-theme="light"] {
+  --surface-app: #dfe6ec;
+  --surface-panel: #f7fafc;
+  --surface-raised: #edf2f6;
+  --control-hover: #e4ebf1;
+  --control-pressed: #d9e2e9;
+  --media-letterbox: #e8eef3;
+  --shadow-panel: 0 18px 46px rgba(48,66,80,.18);
+}
+[data-theme="light"] .asset-card,
+[data-theme="light"] .asset-preview,
+[data-theme="light"] .inspector-asset-preview,
+[data-theme="light"] .graph-node-media { background: #f4f7f9 !important; border-color: var(--ff-border) !important; color: var(--ff-muted) !important; }
+[data-theme="light"] .asset-meta b,
+[data-theme="light"] .asset-meta small,
+[data-theme="light"] .inspector-asset-preview b,
+[data-theme="light"] .inspector-asset-preview small { color: var(--ff-text) !important; }
+[data-theme="light"] .toggle-row { background: #f8fafc !important; border-color: var(--ff-border) !important; color: var(--ff-text) !important; }
+[data-theme="light"] .modal { background: #f7fafc !important; border-color: var(--ff-border-strong) !important; color: var(--ff-text) !important; }
+[data-theme="light"] .modal > header { border-color: var(--ff-border) !important; }
+[data-theme="light"] .modal > header button { color: var(--ff-muted) !important; }
+[data-theme="light"] .issue-list > button { background: #fff !important; border-color: var(--ff-border) !important; color: var(--ff-text) !important; }
+[data-theme="light"] .full-player > aside { border-color: var(--ff-border) !important; }
+[data-theme="light"] .full-player > aside button { background: #fff !important; border-color: var(--ff-border) !important; color: var(--ff-text) !important; }
+[data-theme="light"] .node-create-menu { background: #f7fafc !important; border-color: var(--ff-border-strong) !important; box-shadow: var(--ff-shadow) !important; }
+[data-theme="light"] .node-create-menu b { color: var(--ff-muted) !important; }
+[data-theme="light"] .node-create-menu button { color: var(--ff-text) !important; }
+[data-theme="light"] .node-create-menu button:hover { background: #e4ebf1 !important; }
+[data-theme="light"] .inspector-resize { background: rgba(38,55,70,.06); border-radius: 0 0 0 7px; }
 
 @supports not (backdrop-filter: blur(1px)) {
   .glass-panel,

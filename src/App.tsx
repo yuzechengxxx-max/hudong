@@ -45,7 +45,6 @@ export function App() {
   const futureRef = useRef<Project[]>([]);
   const clipboardRef = useRef<string[]>([]);
   const drawerResizeRef = useRef<{ x: number; width: number } | undefined>(undefined);
-  const inspectorResizeRef = useRef<{ x: number; y: number; width: number; height: number } | undefined>(undefined);
   const selectedId = selectedIds.at(-1);
   const selected = project.nodes.find(node => node.id === selectedId);
   const issues = useMemo(() => diagnoseProject(project), [project]);
@@ -59,27 +58,6 @@ export function App() {
   useEffect(() => { localStorage.setItem("flowfilm-left-width", String(leftWidth)); localStorage.setItem("flowfilm-right-width", String(rightWidth)); localStorage.setItem("flowfilm-timeline-height", String(timelineHeight)); }, [leftWidth, rightWidth, timelineHeight]);
   useEffect(() => { localStorage.setItem("flowfilm-drawer-width", String(drawerWidth)); localStorage.setItem("flowfilm-inspector-height", String(inspectorHeight)); }, [drawerWidth, inspectorHeight]);
   useEffect(() => { localStorage.setItem("flowfilm-minimap-visible", String(minimapVisible)); }, [minimapVisible]);
-  useEffect(() => {
-    const handle = document.querySelector<HTMLElement>(".inspector-float .panel-resize");
-    if (!handle) return;
-    let start: { x: number; y: number; width: number; height: number } | undefined;
-    const onDown = (event: PointerEvent) => {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      start = { x: event.clientX, y: event.clientY, width: rightWidth, height: inspectorHeight };
-      handle.setPointerCapture(event.pointerId);
-    };
-    const onMove = (event: PointerEvent) => {
-      if (!start || !handle.hasPointerCapture(event.pointerId)) return;
-      setRightWidth(Math.min(560, Math.max(280, start.width + start.x - event.clientX)));
-      setInspectorHeight(Math.min(window.innerHeight - 130, Math.max(280, start.height + event.clientY - start.y)));
-    };
-    const onUp = () => { start = undefined; };
-    handle.addEventListener("pointerdown", onDown, true);
-    handle.addEventListener("pointermove", onMove, true);
-    handle.addEventListener("pointerup", onUp, true);
-    return () => { handle.removeEventListener("pointerdown", onDown, true); handle.removeEventListener("pointermove", onMove, true); handle.removeEventListener("pointerup", onUp, true); };
-  }, [rightWidth, inspectorHeight]);
 
   function updateProject(mutator: (current: Project) => Project) {
     setProject(current => {
@@ -232,7 +210,7 @@ export function App() {
         {outputPorts(selected).map(port => { const edge = project.edges.find(item => item.source === selected.id && item.sourcePort === port.value); return <div className="connection-row" key={port.value}><label>{port.label}<select aria-label={port.value === "next" ? "连接到" : `${port.label}连接到`} value={edge?.target ?? ""} onChange={event => event.target.value && connect(port.value, event.target.value)}><option value="">未连接</option>{project.nodes.filter(node => node.id !== selected.id).map(node => <option key={node.id} value={node.id}>{node.title}</option>)}</select></label>{edge && <><small>已连接到：{project.nodes.find(node => node.id === edge.target)?.title}</small><button className="icon-text" onClick={() => removeEdge(edge.id)}>断开</button></>}</div>; })}
         <button className="danger-button" aria-label="删除选中节点" disabled={selected.kind === "start"} onClick={deleteSelected}><Trash2 size={14}/> 删除选中节点</button>
         <div className="theme-section"><h3>游戏 UI</h3><label>强调色<input aria-label="强调色" type="color" value={project.ui.accent} onChange={event => updateProject(current => ({ ...current, ui: { ...current.ui, accent: event.target.value } }))}/></label><label>对话框透明度<input type="range" min="0.3" max="1" step="0.05" value={project.ui.dialogueOpacity} onChange={event => updateProject(current => ({ ...current, ui: { ...current.ui, dialogueOpacity: Number(event.target.value) } }))}/></label></div>
-      </> : <div className="inspector-empty"><p>未选择节点</p><small>单击节点查看属性，或双击画布创建节点。</small></div>}</div><div className="panel-resize" role="separator" aria-label="调整属性面板大小" onPointerDown={event => { inspectorResizeRef.current = { x: event.clientX, y: event.clientY, width: rightWidth, height: inspectorHeight }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { const resize = inspectorResizeRef.current; if (!resize || !event.currentTarget.hasPointerCapture(event.pointerId)) return; setRightWidth(Math.min(560, Math.max(280, resize.width + event.clientX - resize.x))); setInspectorHeight(Math.min(window.innerHeight - 130, Math.max(280, resize.height + event.clientY - resize.y))); }} onPointerUp={() => { inspectorResizeRef.current = undefined; }}/></aside>
+      </> : <div className="inspector-empty"><p>未选择节点</p><small>单击节点查看属性，或双击画布创建节点。</small></div>}</div><InspectorResizeHandle width={rightWidth} height={inspectorHeight} onResize={(nextWidth, nextHeight) => { setRightWidth(nextWidth); setInspectorHeight(nextHeight); }}/></aside>
       {drawer && <aside className="workspace-drawer" style={{ width: drawerWidth }}><header><b>{drawer === "assets" ? "素材" : drawer === "settings" ? "项目设置" : "项目"}</b><button aria-label="关闭面板" onClick={() => setDrawer(undefined)}><X size={16}/></button></header>{drawer === "assets" ? <AssetLibrary project={project} onImport={importAsset} onRemove={id => updateProject(current => ({ ...current, assets: current.assets.filter(asset => asset.id !== id), nodes: current.nodes.map(node => node.kind === "scene" && node.assetId === id ? { ...node, assetId: undefined, mediaUrl: "" } : node) }))}/> : drawer === "settings" ? <ProjectSettings project={project} onChange={next => updateProject(() => next)} themePreference={themePreference} onThemePreferenceChange={setThemePreference}/> : <ProjectPanel project={project} onTitle={title => updateProject(current => ({ ...current, title }))} onExport={exportProject} onImport={() => importRef.current?.click()} onAddVariable={() => updateProject(current => ({ ...current, variables: [...current.variables, { id: `var-${Date.now()}`, name: "新变量", type: "number", initialValue: 0 }] }))}/>}<div className="drawer-resize" role="separator" aria-label={`调整${drawer === "assets" ? "素材" : drawer === "settings" ? "设置" : "项目"}面板宽度`} onPointerDown={event => { drawerResizeRef.current = { x: event.clientX, width: drawerWidth }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!drawerResizeRef.current || !event.currentTarget.hasPointerCapture(event.pointerId)) return; setDrawerWidth(Math.min(620, Math.max(280, drawerResizeRef.current.width + event.clientX - drawerResizeRef.current.x))); }} onPointerUp={() => { drawerResizeRef.current = undefined; }}/></aside>}
       <input ref={importRef} hidden type="file" accept=".json,.flowfilm.json" onChange={event => importProject(event.target.files?.[0])}/>
     </main>
@@ -275,6 +253,11 @@ function Inspector({ project, selected, updateSelected, onAddChoice, onMoveChoic
 
 function DynamicEdges({ project }: { project: Project }) { return <svg className="connections">{project.edges.map(edge => { const source = project.nodes.find(node => node.id === edge.source); const target = project.nodes.find(node => node.id === edge.target); if (!source || !target) return null; const x1 = source.position.x + 185, y1 = source.position.y + 48, x2 = target.position.x, y2 = target.position.y + 48; return <path key={edge.id} d={`M ${x1} ${y1} C ${x1 + 55} ${y1}, ${x2 - 55} ${y2}, ${x2} ${y2}`}/>; })}</svg>; }
 function Timeline({ selected }: { selected: StoryNode }) { return <div className="timeline"><div className="track-labels"><b>演出时间线</b><span>画面</span><span>字幕 / 对白</span><span>音乐 / 音效</span><span>互动</span></div><div className="tracks"><div className="ruler">00:00　　　00:05　　　00:10　　　00:15</div><div className="clip video">{selected.kind === "scene" ? selected.title : "选择场景节点编辑演出"}</div><div className="clip dialogue">{selected.kind === "scene" ? selected.dialogue : "字幕轨道"}</div><div className="clip audio">环境音与配乐轨道</div><div className="clip choice">{selected.kind === "choice" ? "显示选项" : "互动轨道"}</div></div></div>; }
+function InspectorResizeHandle({ width, height, onResize }: { width: number; height: number; onResize(width: number, height: number): void }) {
+  const start = useRef<{ x: number; y: number } | undefined>(undefined);
+  return <div className="panel-resize inspector-resize" role="separator" aria-label="调整属性面板大小" onPointerDown={event => { event.preventDefault(); event.stopPropagation(); start.current = { x: event.clientX, y: event.clientY }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!start.current || !event.currentTarget.hasPointerCapture(event.pointerId)) return; onResize(Math.min(560, Math.max(280, width + start.current.x - event.clientX)), Math.min(window.innerHeight - 130, Math.max(280, height + event.clientY - start.current.y))); }} onPointerUp={() => { start.current = undefined; }}/>
+}
+
 function FloatingPreview({ children }: { children: React.ReactNode }) {
   const [position, setPosition] = useState(() => { try { const saved = JSON.parse(localStorage.getItem("flowfilm-preview-position") ?? "null"); return saved && saved.x >= 70 && saved.y >= 70 ? saved : { x: 76, y: 76 }; } catch { return { x: 76, y: 76 }; } });
   const [width, setWidth] = useState(() => Number(localStorage.getItem("flowfilm-preview-width")) || 280);
