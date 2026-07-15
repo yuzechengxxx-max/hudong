@@ -323,7 +323,21 @@ body,
 [data-theme="light"] .node-create-menu-v2 .node-menu-results button.active { background: #e4ebf1 !important; }
 .branch-editor-row { grid-template-columns: minmax(0, 1fr) 58px 28px; }
 .branch-editor-row input[type="number"] { text-align: center; }
-[data-theme="light"] .inspector-resize { background: rgba(38,55,70,.06); border-radius: 0 0 0 7px; }
+[data-theme="light"] .inspector-resize { background: transparent !important; }
+[data-theme="light"] .tool-island .publish {
+  border-color: #c8870d !important;
+  background: #e7a51e !important;
+  color: #241800 !important;
+  box-shadow: 0 2px 7px rgba(164, 103, 0, .2) !important;
+}
+[data-theme="light"] .tool-island .publish:hover {
+  border-color: #d89508 !important;
+  background: #f0b12b !important;
+  color: #241800 !important;
+}
+[data-theme="light"] .tool-island .publish:active {
+  background: #d99412 !important;
+}
 
 @supports not (backdrop-filter: blur(1px)) {
   .glass-panel,
