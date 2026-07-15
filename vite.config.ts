@@ -3,5 +3,15 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules/@xyflow") || id.includes("node_modules/.pnpm/@xyflow") || id.includes("node_modules/zustand")) return "graph-vendor";
+          if (id.includes("node_modules/react") || id.includes("node_modules/.pnpm/react@") || id.includes("node_modules/.pnpm/react-dom")) return "react-vendor";
+        },
+      },
+    },
+  },
   test: { environment: "jsdom", setupFiles: "./src/test/setup.ts" },
 });

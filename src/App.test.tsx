@@ -369,6 +369,14 @@ describe("editor workbench", () => {
     expect(container.querySelector('[data-testid="rf__edge-e-opening"]')).not.toBeInTheDocument();
   });
 
+  it("renders only one chapter from a 3000-node project", () => {
+    localStorage.setItem("flowfilm-project", JSON.stringify(createLargeProject(3000, 10)));
+    const { container } = render(<App/>);
+    expect(container.querySelectorAll(".react-flow__node")).toHaveLength(300);
+    expect(screen.getByRole("button", { name: "适应视图" })).toBeVisible();
+    expect(screen.getByTestId("graph-minimap")).toBeVisible();
+  }, 15_000);
+
   it("disconnects an edge from its context menu", async () => {
     const { container } = render(<App />);
     const edge = container.querySelector('[data-testid="rf__edge-e-opening"]');
