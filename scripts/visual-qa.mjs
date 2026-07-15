@@ -18,8 +18,10 @@ async function capture(name, theme, viewport) {
     rect: element.getBoundingClientRect().toJSON(),
     overflowX: getComputedStyle(element).overflowX,
   })));
+  const backgroundMarkup = await page.locator(".react-flow__background").evaluate(element => element.outerHTML);
+  const backgroundDotStyle = await page.locator(".react-flow__background-pattern.dots").evaluate(element => ({ fill: getComputedStyle(element).fill, opacity: getComputedStyle(element).opacity }));
   await page.close();
-  return { name, theme, viewport, boxes };
+  return { name, theme, viewport, boxes, backgroundMarkup, backgroundDotStyle };
 }
 
 const results = [

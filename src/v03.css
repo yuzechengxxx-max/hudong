@@ -244,7 +244,7 @@ body,
   .workspace-drawer { max-width: calc(100vw - 96px); }
 }
 
-[data-theme="dark"] .react-flow__background pattern circle { fill: #526b7d !important; }
+[data-theme="dark"] .react-flow__background pattern circle { fill: #637f93 !important; }
 
 @supports not (backdrop-filter: blur(1px)) {
   .glass-panel,

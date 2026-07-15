@@ -12,6 +12,12 @@ export function mergeSelection(initialIds: string[], hitIds: string[], additive:
   return additive ? [...new Set([...initialIds, ...hitIds])] : hitIds;
 }
 
+export function preserveAdditiveSelection<T extends { type: string; id?: string; selected?: boolean }>(changes: T[], initialIds: string[], additive: boolean) {
+  if (!additive) return changes;
+  const initial = new Set(initialIds);
+  return changes.filter(change => !(change.type === "select" && change.selected === false && change.id && initial.has(change.id)));
+}
+
 const StoryNodeView = memo(function StoryNodeView({ data, selected }: NodeProps<Node<GraphData>>) {
   const story = data.story;
   const mediaOffset = story.kind === "scene" && data.asset ? 58 : 0;
@@ -75,7 +81,8 @@ function GraphInner({ project, selectedIds, overlay, onSelect, onMove, onCreate,
   useEffect(() => { setEdges(toEdges(project, selectedIds)); }, [project.edges, selectedIds, setEdges]);
 
   const onNodesChange = useCallback((changes: NodeChange<Node<GraphData>>[]) => {
-    applyNodeChanges(changes);
+    const visibleChanges = preserveAdditiveSelection(changes, paneGesture.current?.initialIds ?? [], paneGesture.current?.additive ?? false);
+    applyNodeChanges(visibleChanges);
     const removed = changes.filter(change => change.type === "remove").map(change => change.id);
     if (removed.length) onDeleteNodes(removed);
     for (const change of changes) if (change.type === "position" && change.position && change.dragging === false) onMove(change.id, change.position.x, change.position.y);
@@ -186,7 +193,7 @@ function GraphInner({ project, selectedIds, overlay, onSelect, onMove, onCreate,
       zoomOnDoubleClick={false}
       attributionPosition="bottom-left"
     >
-      <Background gap={20} size={1}/>
+      <Background color="var(--ff-canvas-dot)" gap={20} size={2}/>
       {minimapVisible && <div className="graph-minimap-wrap" data-testid="graph-minimap"><MiniMap style={{ width: 140, height: 96 }} pannable zoomable nodeStrokeWidth={3} nodeColor={node => colors[(node.data as GraphData).story.kind]}/><button className="minimap-toggle" title="隐藏小地图" aria-label="隐藏小地图" onClick={onToggleMinimap}><EyeOff size={13}/></button></div>}
       <Controls showInteractive={false}/>
       {overlay}

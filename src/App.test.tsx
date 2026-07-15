@@ -264,6 +264,7 @@ describe("editor workbench", () => {
     expect(container.querySelector(".graph-node-body")).not.toHaveClass("nodrag");
     expect(container.querySelector(".react-flow__minimap")).toHaveStyle({ width: "140px", height: "96px" });
     expect(container.querySelector(".react-flow__edge-default")).toBeInTheDocument();
+    expect(container.querySelector(".react-flow__background")).toHaveStyle({ "--xy-background-pattern-color-props": "var(--ff-canvas-dot)" });
   });
 
   it("keeps floating panels resizable without occupying canvas columns", async () => {
