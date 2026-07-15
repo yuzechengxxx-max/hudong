@@ -139,6 +139,12 @@ describe("editor workbench", () => {
     expect(screen.getByRole("separator", { name: "调整预览大小" })).toBeVisible();
   });
 
+  it("migrates the preview away from editor chrome", () => {
+    localStorage.setItem("flowfilm-preview-position", JSON.stringify({ x: 12, y: 12 }));
+    const { container } = render(<App />);
+    expect(container.querySelector(".floating-preview")).toHaveStyle({ left: "76px", top: "76px" });
+  });
+
   it("selects all nodes and clears the selection with editor shortcuts", () => {
     const { container } = render(<App />);
     fireEvent.keyDown(window, { key: "a", ctrlKey: true });
@@ -258,6 +264,19 @@ describe("editor workbench", () => {
     expect(container.querySelector(".graph-node-body")).not.toHaveClass("nodrag");
     expect(container.querySelector(".react-flow__minimap")).toHaveStyle({ width: "140px", height: "96px" });
     expect(container.querySelector(".react-flow__edge-default")).toBeInTheDocument();
+  });
+
+  it("keeps floating panels resizable without occupying canvas columns", async () => {
+    const { container } = render(<App />);
+    expect(container.querySelector(".work-area")).toHaveAttribute("data-layout", "canvas-only");
+    expect(screen.getByRole("separator", { name: "调整属性面板大小" })).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "素材" }));
+    expect(screen.getByRole("separator", { name: "调整素材面板宽度" })).toBeVisible();
+  });
+
+  it("places the minimap toggle with the minimap", () => {
+    render(<App />);
+    expect(screen.getByTestId("graph-minimap")).toContainElement(screen.getByRole("button", { name: "隐藏小地图" }));
   });
 
   it("renders a 300-node project without losing graph controls", () => {

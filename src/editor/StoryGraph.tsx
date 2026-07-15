@@ -187,10 +187,10 @@ function GraphInner({ project, selectedIds, overlay, onSelect, onMove, onCreate,
       attributionPosition="bottom-left"
     >
       <Background gap={20} size={1}/>
-      {minimapVisible && <div data-testid="graph-minimap"><MiniMap style={{ width: 140, height: 96 }} pannable zoomable nodeStrokeWidth={3} nodeColor={node => colors[(node.data as GraphData).story.kind]}/></div>} 
+      {minimapVisible && <div className="graph-minimap-wrap" data-testid="graph-minimap"><MiniMap style={{ width: 140, height: 96 }} pannable zoomable nodeStrokeWidth={3} nodeColor={node => colors[(node.data as GraphData).story.kind]}/><button title="隐藏小地图" aria-label="隐藏小地图" onClick={onToggleMinimap}><EyeOff size={13}/></button></div>}
       <Controls showInteractive={false}/>
       {overlay}
-      <div className="graph-toolbar"><button title="Fit view" aria-label="适应视图" onClick={() => api.fitView({ duration: 250, padding: 0.2 })}>适应画布</button><button title={minimapVisible ? "隐藏小地图" : "显示小地图"} aria-label={minimapVisible ? "隐藏小地图" : "显示小地图"} onClick={onToggleMinimap}>{minimapVisible ? <EyeOff size={14}/> : <MapIcon size={14}/>}</button></div>
+      <div className="graph-toolbar"><button title="Fit view" aria-label="适应视图" onClick={() => api.fitView({ duration: 250, padding: 0.2 })}>适应画布</button>{!minimapVisible && <button title="显示小地图" aria-label="显示小地图" onClick={onToggleMinimap}><MapIcon size={14}/></button>}</div>
       {menu && <div className="node-create-menu nodrag nopan nowheel" style={{ left: menu.x, top: menu.y }}><b>创建节点</b>{(["scene","choice","condition","setVariable","ending"] as const).map(kind => <button key={kind} onClick={() => { onCreate(kind, menu.flowX, menu.flowY); setMenu(undefined); }}><i style={{ background: colors[kind] }}/>{labels[kind]}</button>)}</div>}
       {edgeMenu && <div className="node-create-menu edge-context-menu nodrag nopan nowheel" style={{ left: edgeMenu.x, top: edgeMenu.y }}><b>连接操作</b><button onClick={() => { onDeleteEdges([edgeMenu.id]); setSelectedEdgeIds([]); setEdgeMenu(undefined); }}>断开连接</button></div>}
     </ReactFlow>
