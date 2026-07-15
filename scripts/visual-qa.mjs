@@ -46,10 +46,30 @@ async function capture(name, theme, viewport) {
   return { name, theme, viewport, boxes, backgroundMarkup, backgroundDotStyle, resizeEvidence };
 }
 
+async function captureNodeWorkflow() {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  page.on("console", message => { if (message.type() === "error") errors.push(`node-workflow: ${message.text()}`); });
+  await page.addInitScript(() => { localStorage.clear(); localStorage.setItem("flowfilm-editor-theme", "dark"); });
+  await page.goto("http://127.0.0.1:4180/", { waitUntil: "networkidle" });
+  await page.locator(".react-flow__pane").dblclick({ position: { x: 650, y: 430 } });
+  await page.getByRole("searchbox", { name: "搜索节点" }).fill("随机");
+  await page.screenshot({ path: "outputs/qa/flowfilm-node-menu-v2.png" });
+  await page.getByRole("button", { name: "随机分支" }).click();
+  await page.getByRole("button", { name: "添加分支" }).click();
+  await page.waitForFunction(() => document.querySelectorAll(".graph-node[data-kind='random'] .graph-handle.output").length === 3);
+  const inspector = await page.locator(".inspector-float").evaluate(element => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }));
+  const outputHandles = await page.locator(".graph-node[data-kind='random'] .graph-handle.output").count();
+  const overlayCount = await page.locator("vite-error-overlay").count();
+  await page.screenshot({ path: "outputs/qa/flowfilm-random-inspector-v2.png" });
+  await page.close();
+  return { name: "node-workflow", outputHandles, inspector, overlayCount };
+}
+
 const results = [
   await capture("dark-1440", "dark", { width: 1440, height: 900 }),
   await capture("light-1440", "light", { width: 1440, height: 900 }),
   await capture("light-900", "light", { width: 900, height: 700 }),
+  await captureNodeWorkflow(),
 ];
 
 await browser.close();
