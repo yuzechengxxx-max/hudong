@@ -1,9 +1,12 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
-  build: {
+  build: mode === "standalone" ? {
+    cssCodeSplit: false,
+    rollupOptions: { output: { inlineDynamicImports: true } },
+  } : {
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -14,4 +17,4 @@ export default defineConfig({
     },
   },
   test: { environment: "jsdom", setupFiles: "./src/test/setup.ts" },
-});
+}));
