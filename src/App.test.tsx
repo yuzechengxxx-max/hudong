@@ -25,6 +25,18 @@ describe("editor workbench", () => {
     expect(screen.getByText(`${project.title} / 第二章`)).toBeVisible();
   });
 
+  it("switches chapters and requests focus when a diagnostic issue is opened", async () => {
+    const project = createStarterProject();
+    project.chapters.push({ id: "chapter-two", name: "第二章", order: 1, entryNodeId: "chapter-two-start" });
+    project.nodes.push({ id: "chapter-two-start", kind: "start", title: "第二章开始", position: { x: 800, y: 500 }, chapterId: "chapter-two" });
+    localStorage.setItem("flowfilm-project", JSON.stringify(project));
+    render(<App/>);
+    await userEvent.click(screen.getByRole("button", { name: /项目检查/ }));
+    await userEvent.click(screen.getByRole("button", { name: /第二章开始.*下一步.*没有连接/ }));
+    expect(screen.getByTestId("story-graph")).toHaveAttribute("data-chapter-id", "chapter-two");
+    expect(screen.getByTestId("story-graph")).toHaveAttribute("data-focus-node-id", "chapter-two-start");
+  });
+
   it("renders the glass workbench shell around the graph", () => {
     render(<App />);
     expect(screen.getByTestId("tool-island")).toBeVisible();

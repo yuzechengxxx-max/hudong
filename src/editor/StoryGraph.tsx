@@ -40,6 +40,8 @@ const nodeTypes = { story: StoryNodeView };
 type StoryGraphProps = {
   project: Project;
   activeChapterId?: string;
+  focusNodeId?: string;
+  focusRequestKey?: number;
   selectedIds: string[];
   overlay?: ReactNode;
   onSelect(ids: string[]): void;
@@ -75,7 +77,7 @@ function toEdges(project: Project, selectedIds: string[]): Edge[] {
   return project.edges.map(edge => ({ id: edge.id, source: edge.source, target: edge.target, sourceHandle: edge.sourcePort, targetHandle: "input", type: "default", animated: selected.has(edge.source), style: { stroke: selected.has(edge.source) ? "#f0b429" : "#77818c", strokeWidth: 2 } }));
 }
 
-function GraphInner({ project, selectedIds, activeChapterId = project.nodes.find(node => selectedIds.includes(node.id))?.chapterId ?? project.defaultChapterId, overlay, onSelect, onMove, onCreate, onConnect, onDeleteNodes, onDeleteEdges, onAssetDrop, minimapVisible, onToggleMinimap, gridVisible: externalGridVisible, onToggleGrid: externalToggleGrid }: StoryGraphProps) {
+function GraphInner({ project, selectedIds, activeChapterId = project.nodes.find(node => selectedIds.includes(node.id))?.chapterId ?? project.defaultChapterId, focusNodeId, focusRequestKey = 0, overlay, onSelect, onMove, onCreate, onConnect, onDeleteNodes, onDeleteEdges, onAssetDrop, minimapVisible, onToggleMinimap, gridVisible: externalGridVisible, onToggleGrid: externalToggleGrid }: StoryGraphProps) {
   const api = useReactFlow();
   const chapterGraph = selectChapterGraph(project, activeChapterId);
   const visibleProject = { ...project, nodes: chapterGraph.nodes, edges: chapterGraph.edges };
@@ -98,6 +100,14 @@ function GraphInner({ project, selectedIds, activeChapterId = project.nodes.find
   }, [project.nodes, project.assets, activeChapterId, selectedIds, setNodes]);
 
   useEffect(() => { setEdges(toEdges(visibleProject, selectedIds)); }, [project.edges, activeChapterId, selectedIds, setEdges]);
+
+  useEffect(() => {
+    if (!focusNodeId) return;
+    const story = visibleProject.nodes.find(node => node.id === focusNodeId);
+    if (!story) return;
+    const frame = requestAnimationFrame(() => api.setCenter(story.position.x + 100, story.position.y + 55, { zoom: Math.max(0.85, Math.min(api.getZoom(), 1.35)), duration: 280 }));
+    return () => cancelAnimationFrame(frame);
+  }, [activeChapterId, api, focusNodeId, focusRequestKey]);
 
   const onNodesChange = useCallback((changes: NodeChange<Node<GraphData>>[]) => {
     const visibleChanges = preserveAdditiveSelection(changes, paneGesture.current?.initialIds ?? [], paneGesture.current?.additive ?? false);
@@ -141,7 +151,7 @@ function GraphInner({ project, selectedIds, activeChapterId = project.nodes.find
     return () => graph?.removeEventListener("flowfilm:selection-end", finishTestSelection);
   }, [finishSelection, onSelect, selectedIds]);
 
-  return <div ref={graphRef} className="story-graph" data-testid="story-graph" data-chapter-id={activeChapterId} tabIndex={0} onMouseDownCapture={(event) => startPaneGesture(event.target, event.clientX, event.clientY, event.shiftKey)} onMouseMoveCapture={(event) => movePaneGesture(event.clientX, event.clientY)} onPointerDownCapture={(event) => {
+  return <div ref={graphRef} className="story-graph" data-testid="story-graph" data-chapter-id={activeChapterId} data-focus-node-id={focusNodeId} tabIndex={0} onMouseDownCapture={(event) => startPaneGesture(event.target, event.clientX, event.clientY, event.shiftKey)} onMouseMoveCapture={(event) => movePaneGesture(event.clientX, event.clientY)} onPointerDownCapture={(event) => {
     startPaneGesture(event.target, event.clientX, event.clientY, event.shiftKey);
   }} onPointerMoveCapture={(event) => {
     movePaneGesture(event.clientX, event.clientY);

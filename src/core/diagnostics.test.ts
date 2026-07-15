@@ -63,4 +63,23 @@ describe("project diagnostics", () => {
     expect(issues).toContainEqual(expect.objectContaining({ code: "invalid-duration", nodeId: "wait" }));
     expect(issues).toContainEqual(expect.objectContaining({ code: "division-by-zero", nodeId: "divide" }));
   });
+
+  it("validates chapter ownership, entries, edges, and chapter jump targets", () => {
+    const project = createStarterProject();
+    project.chapters.push({ id: "chapter-two", name: "第二章", order: 1, entryNodeId: "missing-entry" });
+    project.nodes.push(
+      { id: "chapter-two-ending", kind: "ending", title: "第二章结局", endingTitle: "结束", position: { x: 0, y: 0 }, chapterId: "chapter-two" },
+      { id: "missing-chapter-jump", kind: "jump", title: "错误跳转", position: { x: 0, y: 0 }, chapterId: "main-story", targetType: "chapter", targetId: "missing-chapter" },
+    );
+    project.edges.push({ id: "cross-chapter", source: "ending", sourcePort: "next", target: "chapter-two-ending" });
+    const issues = diagnoseProject(project);
+    expect(issues).toContainEqual(expect.objectContaining({ code: "invalid-chapter-entry", chapterId: "chapter-two" }));
+    expect(issues).toContainEqual(expect.objectContaining({ code: "cross-chapter-edge", nodeId: "ending", chapterId: "main-story" }));
+    expect(issues).toContainEqual(expect.objectContaining({ code: "missing-chapter-target", nodeId: "missing-chapter-jump", chapterId: "main-story" }));
+  });
+
+  it("reports an undeclared default chapter", () => {
+    const project = { ...createStarterProject(), defaultChapterId: "missing" };
+    expect(diagnoseProject(project)).toContainEqual(expect.objectContaining({ code: "missing-default-chapter" }));
+  });
 });
