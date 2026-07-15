@@ -27,8 +27,23 @@ async function capture(name, theme, viewport) {
   })));
   const backgroundMarkup = await page.locator(".react-flow__background").evaluate(element => element.outerHTML);
   const backgroundDotStyle = await page.locator(".react-flow__background-pattern.dots").evaluate(element => ({ fill: getComputedStyle(element).fill, opacity: getComputedStyle(element).opacity }));
+  let resizeEvidence = null;
+  const resizeHandle = page.getByRole("separator", { name: "调整属性面板大小" });
+  if (await resizeHandle.count()) {
+    const before = await page.locator(".inspector-float").boundingBox();
+    const handleBox = await resizeHandle.boundingBox();
+    if (before && handleBox) {
+      await page.mouse.move(handleBox.x + 7, handleBox.y + handleBox.height - 7);
+      await page.mouse.down();
+      await page.mouse.move(handleBox.x - 70, handleBox.y + handleBox.height - 7);
+      await page.mouse.up();
+      await page.waitForTimeout(80);
+      const after = await page.locator(".inspector-float").boundingBox();
+      resizeEvidence = { beforeWidth: before.width, afterWidth: after?.width };
+    }
+  }
   await page.close();
-  return { name, theme, viewport, boxes, backgroundMarkup, backgroundDotStyle };
+  return { name, theme, viewport, boxes, backgroundMarkup, backgroundDotStyle, resizeEvidence };
 }
 
 const results = [

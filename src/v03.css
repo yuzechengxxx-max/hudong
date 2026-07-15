@@ -103,10 +103,11 @@ body,
   position: absolute;
   right: 0;
   bottom: 0;
-  width: 18px;
-  height: 18px;
+  width: 28px;
+  height: 28px;
   cursor: nwse-resize;
-  z-index: 4;
+  z-index: 20;
+  touch-action: none;
 }
 .panel-resize::after {
   content: "";
@@ -239,6 +240,17 @@ body,
 [data-theme="light"] .react-flow__controls-button:hover,
 [data-theme="light"] .graph-toolbar button:hover { background: #e4ebf1 !important; color: #172531 !important; }
 [data-theme="light"] .danger-button { background: #fff1f2 !important; color: #a3303d !important; border-color: #e6a9b0 !important; }
+[data-theme="light"] .upload-button,
+[data-theme="light"] .scene-continue,
+[data-theme="light"] .dialogue-box button,
+[data-theme="light"] .choice-screen button,
+[data-theme="light"] .ending-screen button { background: #f8fafc !important; color: #263746 !important; border-color: var(--ff-border) !important; }
+[data-theme="light"] .upload-button:hover,
+[data-theme="light"] .scene-continue:hover,
+[data-theme="light"] .dialogue-box button:hover,
+[data-theme="light"] .choice-screen button:hover,
+[data-theme="light"] .ending-screen button:hover { background: #e4ebf1 !important; color: #172531 !important; }
+[data-theme="light"] .dialogue-box { border-left-color: var(--accent) !important; }
 
 .form input,
 .form textarea,
