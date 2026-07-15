@@ -279,6 +279,15 @@ describe("editor workbench", () => {
     expect(screen.getByTestId("graph-minimap")).toContainElement(screen.getByRole("button", { name: "隐藏小地图" }));
   });
 
+  it("keeps minimap commands on the canvas right and inspector resizing on the left", async () => {
+    const { container } = render(<App />);
+    expect(screen.getByRole("button", { name: "隐藏小地图" })).toHaveClass("minimap-toggle");
+    expect(screen.getByRole("separator", { name: "调整属性面板大小" }).closest(".inspector-float")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "隐藏小地图" }));
+    expect(screen.getByRole("button", { name: "显示小地图" })).toHaveClass("minimap-toggle");
+    expect(container.querySelector(".graph-toolbar .minimap-toggle")).not.toBeInTheDocument();
+  });
+
   it("renders a 300-node project without losing graph controls", () => {
     localStorage.setItem("flowfilm-project", JSON.stringify(createLargeProject(300)));
     render(<App />);

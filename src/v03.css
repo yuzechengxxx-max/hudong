@@ -132,7 +132,7 @@ body,
 
 .graph-node {
   width: 220px;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid var(--ff-border-strong) !important;
   border-left: 3px solid var(--node-color) !important;
   border-radius: 7px !important;
@@ -140,6 +140,7 @@ body,
   color: var(--ff-text) !important;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24) !important;
 }
+.graph-node-body > span { border-radius: 5px 5px 0 0; }
 .graph-node.selected {
   border-color: var(--ff-border-strong) !important;
   border-left-color: var(--node-color) !important;
@@ -163,9 +164,10 @@ body,
 
 .graph-minimap-wrap { position: absolute; right: 14px; bottom: 54px; width: 140px; height: 96px; z-index: 8; }
 .graph-minimap-wrap .react-flow__minimap { position: static !important; margin: 0 !important; background: var(--ff-panel) !important; }
-.graph-minimap-wrap > button {
+.graph-minimap-wrap > button,
+.minimap-toggle-standalone {
   position: absolute;
-  top: 5px;
+  bottom: 5px;
   right: 5px;
   display: grid;
   place-items: center;
@@ -176,7 +178,32 @@ body,
   background: var(--ff-glass-solid);
   color: var(--ff-muted);
 }
-.graph-toolbar { left: 12px !important; bottom: 54px !important; }
+.minimap-toggle-standalone {
+  position: absolute;
+  z-index: 9;
+  right: 14px;
+  bottom: 54px;
+  width: 30px;
+  height: 30px;
+}
+.graph-toolbar { left: 54px !important; bottom: 54px !important; }
+.react-flow__controls { left: 12px !important; bottom: 54px !important; }
+
+.inspector-float .panel-resize {
+  left: 0;
+  right: auto;
+  cursor: nesw-resize;
+}
+.inspector-float .panel-resize::after {
+  left: 4px;
+  right: auto;
+  border-right: 0;
+  border-left: 2px solid var(--ff-muted);
+  border-bottom-left-radius: 5px;
+}
+.preview-resize::after {
+  border-bottom-right-radius: 5px;
+}
 
 .floating-preview { color: var(--ff-text); }
 .preview-dock > footer,
