@@ -3,7 +3,8 @@ import { Background, ConnectionMode, Controls, Handle, MiniMap, Position, ReactF
 import "@xyflow/react/dist/style.css";
 import { EyeOff, Grid3X3, Map as MapIcon } from "lucide-react";
 import type { NodeKind, Project, StoryNode } from "../core/project";
-import { getNodeDefinition } from "../core/nodeRegistry";
+import { getNodeDefinition, getNodeOutputs } from "../core/nodeRegistry";
+import { NodeCreateMenu } from "./NodeCreateMenu";
 
 type GraphData = { story: StoryNode; asset?: Project["assets"][number] };
 
@@ -17,11 +18,15 @@ export function preserveAdditiveSelection<T extends { type: string; id?: string;
   return changes.filter(change => !(change.type === "select" && change.selected === false && change.id && initial.has(change.id)));
 }
 
+export function getGraphHandles(story: StoryNode, mediaOffset = 0) {
+  return getNodeOutputs(story).map((port, index) => ({ ...port, top: 70 + mediaOffset + index * 25 }));
+}
+
 const StoryNodeView = memo(function StoryNodeView({ data, selected }: NodeProps<Node<GraphData>>) {
   const story = data.story;
   const definition = getNodeDefinition(story.kind);
   const mediaOffset = story.kind === "scene" && data.asset ? 58 : 0;
-  const handles = story.kind === "choice" ? story.choices.map((choice, index) => ({ id: choice.id, label: choice.label, top: 68 + index * 25 })) : story.kind === "condition" ? [{ id: "true", label: "成立", top: 70 }, { id: "false", label: "不成立", top: 96 }] : story.kind === "ending" ? [] : [{ id: "next", label: "下一步", top: 72 + mediaOffset }];
+  const handles = getGraphHandles(story, mediaOffset);
   return <div className={`graph-node ${selected ? "selected" : ""} ${data.asset ? "has-media" : ""}`} data-kind={story.kind} style={{ "--node-color": definition.color, minHeight: Math.max(104 + mediaOffset, 70 + handles.length * 25) } as React.CSSProperties}>
     <Handle type="target" position={Position.Left} id="input" className="graph-handle input"/>
     <div className="graph-node-body" aria-label={story.title} role="button" tabIndex={0}><span>{definition.label}</span><strong>{story.title}</strong><small>{summary(story)}</small></div>
@@ -206,10 +211,23 @@ function GraphInner({ project, selectedIds, overlay, onSelect, onMove, onCreate,
       {overlay}
       <div className="graph-toolbar"><button title="Fit view" aria-label="适应视图" onClick={() => api.fitView({ duration: 250, padding: 0.2 })}>适应画布</button><button className="grid-toggle" data-active={gridVisible || undefined} aria-pressed={gridVisible} title={gridVisible ? "隐藏点阵" : "显示点阵"} aria-label={gridVisible ? "隐藏点阵" : "显示点阵"} onClick={onToggleGrid}><Grid3X3 size={14}/></button></div>
       {!minimapVisible && <button className="minimap-toggle minimap-toggle-standalone" title="显示小地图" aria-label="显示小地图" onClick={onToggleMinimap}><MapIcon size={14}/></button>}
-      {menu && <div className="node-create-menu nodrag nopan nowheel" style={{ left: menu.x, top: menu.y }}><b>创建节点</b>{(["scene","choice","condition","setVariable","ending"] as const).map(kind => { const definition = getNodeDefinition(kind); return <button key={kind} onClick={() => { onCreate(kind, menu.flowX, menu.flowY); setMenu(undefined); }}><i style={{ background: definition.color }}/>{definition.label}</button>; })}</div>}
+      {menu && <NodeCreateMenu position={{ x: menu.x, y: menu.y }} graphPosition={{ x: menu.flowX, y: menu.flowY }} onCreate={onCreate} onClose={() => setMenu(undefined)}/>}
       {edgeMenu && <div className="node-create-menu edge-context-menu nodrag nopan nowheel" style={{ left: edgeMenu.x, top: edgeMenu.y }}><b>连接操作</b><button onClick={() => { onDeleteEdges([edgeMenu.id]); setSelectedEdgeIds([]); setEdgeMenu(undefined); }}>断开连接</button></div>}
     </ReactFlow>
   </div>;
 }
 
-function summary(node: StoryNode) { if (node.kind === "scene") return node.showDialogue ? node.dialogue : "纯视频场景"; if (node.kind === "choice") return `${node.choices.length} 个分支`; if (node.kind === "condition") return `变量 ${node.operator} ${String(node.value)}`; if (node.kind === "setVariable") return `${node.operation === "add" ? "增加" : "设为"} ${String(node.value)}`; if (node.kind === "ending") return node.endingTitle; return "故事起点"; }
+function summary(node: StoryNode) {
+  if (node.kind === "scene") return node.showDialogue ? node.dialogue : "纯视频场景";
+  if (node.kind === "choice" || node.kind === "timedChoice") return `${node.choices.length} 个分支${node.kind === "timedChoice" ? ` · ${node.durationMs / 1000} 秒` : ""}`;
+  if (node.kind === "condition") return `变量 ${node.operator} ${String(node.value)}`;
+  if (node.kind === "setVariable") return `${node.operation} ${String(node.value)}`;
+  if (node.kind === "random") return `${node.branches.length} 个随机分支`;
+  if (node.kind === "wait") return `等待 ${node.durationMs / 1000} 秒`;
+  if (node.kind === "music") return node.action === "play" ? "播放背景音乐" : node.action === "stop" ? "停止背景音乐" : "淡出背景音乐";
+  if (node.kind === "sound") return "播放一次音效";
+  if (node.kind === "chapter") return node.chapterId;
+  if (node.kind === "jump") return `前往 ${node.chapterId}`;
+  if (node.kind === "ending") return node.endingTitle;
+  return "故事起点";
+}

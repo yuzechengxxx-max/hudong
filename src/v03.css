@@ -305,6 +305,22 @@ body,
 [data-theme="light"] .node-create-menu b { color: var(--ff-muted) !important; }
 [data-theme="light"] .node-create-menu button { color: var(--ff-text) !important; }
 [data-theme="light"] .node-create-menu button:hover { background: #e4ebf1 !important; }
+
+.node-create-menu-v2 { width: 292px; max-height: min(520px, calc(100vh - 120px)); padding: 8px; overflow: hidden; border-radius: 8px; background: color-mix(in srgb, var(--ff-panel-solid) 94%, transparent); backdrop-filter: blur(20px) saturate(135%); }
+.node-menu-search { height: 34px; display: flex; align-items: center; gap: 7px; padding: 0 9px; border: 1px solid var(--ff-border); border-radius: 6px; background: var(--ff-control-bg); color: var(--ff-muted); }
+.node-menu-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--ff-text); font: inherit; }
+.node-menu-results { max-height: 430px; overflow: auto; padding-top: 5px; }
+.node-menu-results section { margin: 0; padding: 3px 0 5px; }
+.node-menu-results section h3 { margin: 0; padding: 5px 8px 3px; color: var(--ff-muted); font-size: 10px; font-weight: 650; }
+.node-create-menu-v2 .node-menu-results button { min-height: 42px; align-items: flex-start; padding: 6px 8px; }
+.node-create-menu-v2 .node-menu-results button.active { background: var(--ff-control-hover); }
+.node-create-menu-v2 .node-menu-results button > i { flex: 0 0 auto; margin-top: 5px; }
+.node-create-menu-v2 .node-menu-results button > span { min-width: 0; display: grid; gap: 2px; }
+.node-create-menu-v2 .node-menu-results button b { padding: 0; color: var(--ff-text); font-size: 12px; }
+.node-create-menu-v2 .node-menu-results button small { overflow: hidden; color: var(--ff-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.node-menu-empty { margin: 18px 8px; color: var(--ff-muted); text-align: center; }
+[data-theme="light"] .node-menu-search { background: #f4f7f9; }
+[data-theme="light"] .node-create-menu-v2 .node-menu-results button.active { background: #e4ebf1 !important; }
 [data-theme="light"] .inspector-resize { background: rgba(38,55,70,.06); border-radius: 0 0 0 7px; }
 
 @supports not (backdrop-filter: blur(1px)) {
