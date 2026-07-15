@@ -4,6 +4,7 @@ import { diagnoseProject } from "./core/diagnostics";
 import { createNode, createStarterProject, type NodeKind, type Project, type StoryNode } from "./core/project";
 import { getNodeDefinition } from "./core/nodeRegistry";
 import { loadProject } from "./core/projectMigration";
+import { createExportPlayerHtml } from "./core/exportPlayer";
 import { createRuntime, type RuntimeSnapshot } from "./core/runtime";
 import { ResizeHandle } from "./editor/ResizeHandle";
 import { StoryGraph } from "./editor/StoryGraph";
@@ -42,6 +43,7 @@ export function App() {
   const [minimapVisible, setMinimapVisible] = useState(() => localStorage.getItem("flowfilm-minimap-visible") !== "false");
   const [runtime, setRuntime] = useState(() => { const value = createRuntime(project); value.start(); return value; });
   const [runtimeState, setRuntimeState] = useState<RuntimeSnapshot>(() => createRuntime(project).start());
+  useRuntimeAudio(project, runtimeState, runtime, setRuntimeState);
   const importRef = useRef<HTMLInputElement>(null);
   const pastRef = useRef<Project[]>([]);
   const futureRef = useRef<Project[]>([]);
@@ -204,7 +206,7 @@ export function App() {
 
     <main className="work-area no-library" data-layout="canvas-only">
       <section className="center-stack">
-        <StoryGraph project={project} selectedIds={selectedIds} minimapVisible={minimapVisible} onToggleMinimap={() => setMinimapVisible(value => !value)} onSelect={selectNodes} onMove={moveNode} onCreate={(kind, x, y) => addNode(kind, { x, y })} onConnect={connectGraph} onDeleteNodes={deleteGraphNodes} onDeleteEdges={deleteGraphEdges} onAssetDrop={attachAsset} overlay={<FloatingPreview><PreviewDock project={project} node={previewNode} state={runtimeState} onAdvance={() => setRuntimeState(runtime.advance())} onChoose={port => setRuntimeState(runtime.choose(port))} onRestart={() => restart(false)} onExpand={() => setShowPlayer(true)}/><div className="canvas-preview-actions"><button className="preview-command" onClick={() => restart(false)}><RotateCcw size={14}/> 从头预览</button><button className="preview-command" onClick={() => { restart(true); setShowPlayer(true); }}><Maximize2 size={14}/> 弹出试玩</button></div></FloatingPreview>}/>
+        <StoryGraph project={project} selectedIds={selectedIds} minimapVisible={minimapVisible} onToggleMinimap={() => setMinimapVisible(value => !value)} onSelect={selectNodes} onMove={moveNode} onCreate={(kind, x, y) => addNode(kind, { x, y })} onConnect={connectGraph} onDeleteNodes={deleteGraphNodes} onDeleteEdges={deleteGraphEdges} onAssetDrop={attachAsset} overlay={<FloatingPreview><PreviewDock project={project} node={previewNode} state={runtimeState} onAdvance={() => setRuntimeState(runtime.advance())} onChoose={port => setRuntimeState(runtime.choose(port))} onResume={() => setRuntimeState(runtime.resume())} onTimeout={() => setRuntimeState(runtime.timeout())} onRestart={() => restart(false)} onExpand={() => setShowPlayer(true)}/><div className="canvas-preview-actions"><button className="preview-command" onClick={() => restart(false)}><RotateCcw size={14}/> 从头预览</button><button className="preview-command" onClick={() => { restart(true); setShowPlayer(true); }}><Maximize2 size={14}/> 弹出试玩</button></div></FloatingPreview>}/>
         {timelineOpen ? <><ResizeHandle orientation="horizontal" onResize={delta => setTimelineHeight(value => Math.min(420, Math.max(110, value - delta)))}/><div data-testid="timeline-drawer" className="timeline-drawer" style={{ height: timelineHeight }}><Timeline selected={selected ?? project.nodes[0]}/></div></> : null}
       </section>
       <aside className="inspector inspector-float glass-panel resizable-panel" style={{ width: rightWidth, height: inspectorHeight }}><div className="inspector-title">属性</div><div className="form">{selected ? <>
@@ -218,7 +220,7 @@ export function App() {
     </main>
     <footer className="statusbar status-float glass-panel" data-testid="status-float"><span className={issues.some(issue => issue.severity === "error") ? "unhealthy" : "healthy"}>{issues.length ? <AlertTriangle size={12}/> : <CheckCircle2 size={12}/>} {issues.length ? `${issues.length} 个问题` : "项目正常"}</span><span>{project.nodes.length} 个节点</span><span>{project.assets.length} 个素材</span><span>{project.variables.length} 个变量</span><span className={`save-state ${saveStatus}`}>{saveStatus === "saving" ? "保存中…" : saveStatus === "error" ? "保存失败" : saveStatus === "saved" ? `已保存 · ${savedAt}` : "有未保存修改"}</span><span className="top-spacer"/><button aria-label="演出时间线" className={timelineOpen ? "active" : ""} onClick={() => setTimelineOpen(value => !value)}>演出时间线</button><button onClick={() => { setLeftWidth(230); setRightWidth(330); setTimelineHeight(190); }}>恢复布局</button></footer>
     {showDiagnostics && <Modal title="项目检查" onClose={() => setShowDiagnostics(false)}><div className="issue-list">{issues.length ? issues.map((issue, index) => <button key={`${issue.code}-${index}`} onClick={() => { if (issue.nodeId) setSelectedIds([issue.nodeId]); setShowDiagnostics(false); }}><b>{issue.severity === "error" ? "错误" : "警告"}</b><span>{issue.message}</span></button>) : <div className="empty-state"><CheckCircle2 size={32}/><h3>项目可以发布</h3><p>没有发现剧情连接问题。</p></div>}</div></Modal>}
-    {showPlayer && <Modal wide title="独立试玩" onClose={() => setShowPlayer(false)}><div className="full-player"><PreviewDock project={project} node={previewNode} state={runtimeState} onAdvance={() => setRuntimeState(runtime.advance())} onChoose={port => setRuntimeState(runtime.choose(port))} onRestart={() => restart(false)}/><aside><h3>运行状态</h3>{Object.entries(runtimeState.variables).map(([key, value]) => <p key={key}>{project.variables.find(item => item.id === key)?.name ?? key}<b>{String(value)}</b></p>)}<button onClick={() => restart(false)}><RotateCcw size={14}/> 从头开始</button></aside></div></Modal>}
+    {showPlayer && <Modal wide title="独立试玩" onClose={() => setShowPlayer(false)}><div className="full-player"><PreviewDock project={project} node={previewNode} state={runtimeState} onAdvance={() => setRuntimeState(runtime.advance())} onChoose={port => setRuntimeState(runtime.choose(port))} onResume={() => setRuntimeState(runtime.resume())} onTimeout={() => setRuntimeState(runtime.timeout())} onRestart={() => restart(false)}/><aside><h3>运行状态</h3>{Object.entries(runtimeState.variables).map(([key, value]) => <p key={key}>{project.variables.find(item => item.id === key)?.name ?? key}<b>{String(value)}</b></p>)}<button onClick={() => restart(false)}><RotateCcw size={14}/> 从头开始</button></aside></div></Modal>}
   </EditorShell>;
 }
 
@@ -273,9 +275,32 @@ function FloatingPreview({ children }: { children: React.ReactNode }) {
     {!collapsed && <div className="floating-preview-content">{children}<div className="preview-resize" role="separator" aria-label="调整预览大小" onPointerDown={event => { resize.current = { x: event.clientX, width }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!resize.current || !event.currentTarget.hasPointerCapture(event.pointerId)) return; setWidth(Math.min(520, Math.max(240, resize.current.width + event.clientX - resize.current.x))); }} onPointerUp={() => { resize.current = undefined; }}/></div>}
   </section>;
 }
-function PreviewDock({ project, node, state, onAdvance, onChoose, onRestart, onExpand }: { project: Project; node?: StoryNode; state: RuntimeSnapshot; onAdvance(): void; onChoose(port: string): void; onRestart(): void; onExpand?: () => void }) {
+function useRuntimeAudio(project: Project, state: RuntimeSnapshot, runtime: ReturnType<typeof createRuntime>, setState: (state: RuntimeSnapshot) => void) {
+  const music = useRef<HTMLAudioElement | undefined>(undefined);
+  useEffect(() => {
+    if (!state.effects.length || typeof Audio === "undefined") return;
+    for (const effect of state.effects) {
+      if (effect.type === "music-stop" || effect.type === "music-fade-out") { music.current?.pause(); music.current = undefined; continue; }
+      const asset = project.assets.find(item => item.id === effect.assetId);
+      if (!asset) continue;
+      const audio = new Audio(asset.url);
+      audio.volume = effect.volume;
+      if (effect.type === "music-play") { music.current?.pause(); audio.loop = true; music.current = audio; }
+      void audio.play().catch(() => undefined);
+    }
+    runtime.consumeEffects();
+    setState(runtime.snapshot());
+  }, [project.assets, runtime, setState, state.effects]);
+}
+function PreviewDock({ project, node, state, onAdvance, onChoose, onResume, onTimeout, onRestart, onExpand }: { project: Project; node?: StoryNode; state: RuntimeSnapshot; onAdvance(): void; onChoose(port: string): void; onResume(): void; onTimeout(): void; onRestart(): void; onExpand?: () => void }) {
   const asset = node?.kind === "scene" ? project.assets.find(item => item.id === node.assetId) : undefined;
   const isVideo = asset?.type.startsWith("video/") ?? false;
+  useEffect(() => {
+    const pending = state.pendingInteraction;
+    if (!pending) return;
+    const timer = window.setTimeout(pending.type === "wait" ? onResume : onTimeout, pending.durationMs);
+    return () => window.clearTimeout(timer);
+  }, [state.currentNodeId, state.pendingInteraction, onResume, onTimeout]);
   return <section className="preview-dock" style={{ "--accent": project.ui.accent, "--dialogue-opacity": project.ui.dialogueOpacity, "--button-radius": `${project.ui.buttonRadius}px` } as React.CSSProperties}>
     <header><b>实时预览</b><span>{project.display.aspectRatio}</span>{onExpand && <button aria-label="展开试玩" onClick={onExpand}><Maximize2 size={14}/></button>}</header>
     <div className="preview-stage" data-testid="preview-stage" style={{ aspectRatio: project.display.aspectRatio.replace(":", " / ") }}>
@@ -283,7 +308,8 @@ function PreviewDock({ project, node, state, onAdvance, onChoose, onRestart, onE
       {isVideo && <video src={asset?.url} autoPlay muted onEnded={node?.kind === "scene" && !node.showDialogue ? onAdvance : undefined}/>} 
       {node?.kind === "scene" && node.showDialogue && <div className="dialogue-box"><b>{node.speaker}</b><p>{node.dialogue}</p><button aria-label="继续剧情" onClick={onAdvance}>继续</button></div>}
       {node?.kind === "scene" && !node.showDialogue && !isVideo && <button className="scene-continue" aria-label="继续剧情" onClick={onAdvance}>继续</button>}
-      {node?.kind === "choice" && <div className="choice-screen"><p>{node.prompt}</p>{node.choices.map(choice => <button key={choice.id} onClick={() => onChoose(choice.id)}>{choice.label}</button>)}</div>}
+      {state.status === "waiting" && state.pendingInteraction?.type === "wait" && <div className="choice-screen wait-screen"><p>等待 {state.pendingInteraction.durationMs / 1000} 秒</p><button aria-label="跳过等待" onClick={onResume}>跳过等待</button></div>}
+      {(node?.kind === "choice" || node?.kind === "timedChoice") && <div className="choice-screen">{node.kind === "timedChoice" && <small className="preview-timer">限时 {node.durationMs / 1000} 秒</small>}<p>{node.prompt}</p>{node.choices.map(choice => <button key={choice.id} onClick={() => onChoose(choice.id)}>{choice.label}</button>)}</div>}
       {node?.kind === "ending" && <div className="ending-screen"><small>结局达成</small><h2>{node.endingTitle}</h2><button onClick={onRestart}><RotateCcw size={14}/> 重新试玩</button></div>}
       {state.status === "error" && <div className="ending-screen"><AlertTriangle/><h2>剧情连接异常</h2><p>请检查当前节点的出口。</p></div>}
     </div>
@@ -294,6 +320,8 @@ function Modal({ title, onClose, wide, children }: { title: string; onClose(): v
 function nodeSummary(node: StoryNode) { if (node.kind === "scene") return node.dialogue; if (node.kind === "choice") return `${node.choices.length} 个选项`; if (node.kind === "condition") return `当变量 ${node.operator} ${String(node.value)}`; if (node.kind === "setVariable") return `${node.operation === "add" ? "增加" : "设为"} ${String(node.value)}`; if (node.kind === "ending") return node.endingTitle; return "自动进入下一步"; }
 
 export function createPlayableHtml(project: Project) {
+  return createExportPlayerHtml(project);
+  /* Legacy implementation retained temporarily for source-level compatibility; unreachable after the shared v2 exporter above. */
   const data = JSON.stringify(project).replace(/</g, "\\u003c");
   return `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${project.title}</title><style>html,body,#app{margin:0;width:100%;height:100%;background:#080a0d;color:#fff;font-family:system-ui,"Microsoft YaHei"}#app{display:grid;place-items:center}.stage{width:min(100vw,1200px);aspect-ratio:16/9;position:relative;background:#18212a center/cover no-repeat;overflow:hidden}.stage video,.stage img{width:100%;height:100%;object-fit:cover}.dialog{position:absolute;left:6%;right:6%;bottom:6%;padding:18px;background:rgba(5,7,9,.86);border-left:4px solid ${project.ui.accent}}button{display:block;width:min(80%,520px);margin:10px auto;padding:14px;border:1px solid ${project.ui.accent};border-radius:${project.ui.buttonRadius}px;background:#111b;color:#fff}.compact{position:absolute;right:3%;bottom:3%;width:auto;padding:9px 14px}.ending{text-align:center;margin-top:25%}</style><div id="app"></div><script>const project=${data};let vars=Object.fromEntries(project.variables.map(v=>[v.id,v.initialValue]));const app=document.querySelector('#app');const node=id=>project.nodes.find(n=>n.id===id);const next=(id,p)=>project.edges.find(e=>e.source===id&&e.sourcePort===p)?.target;function go(id){const n=node(id);if(!n)return app.innerHTML='<h2>剧情连接异常</h2>';if(n.kind==='start')return go(next(n.id,'next'));if(n.kind==='setVariable'){vars[n.variableId]=n.operation==='add'?Number(vars[n.variableId]||0)+Number(n.value):n.value;return go(next(n.id,'next'))}if(n.kind==='condition'){const l=vars[n.variableId]||0,ok=n.operator==='eq'?l===n.value:n.operator==='gte'?Number(l)>=Number(n.value):Number(l)<=Number(n.value);return go(next(n.id,ok?'true':'false'))}const asset=n.assetId&&project.assets.find(a=>a.id===n.assetId),isVideo=!!asset&&asset.type.startsWith('video/');let media=asset?(isVideo?'<video autoplay muted src="'+asset.url+'"></video>':'<img src="'+asset.url+'">'):'';if(n.kind==='scene'){const overlay=n.showDialogue?'<div class="dialog"><b>'+n.speaker+'</b><p>'+n.dialogue+'</p><button id="next">继续</button></div>':isVideo?'':'<button class="compact" id="next">继续</button>';app.innerHTML='<div class="stage">'+media+overlay+'</div>';const video=document.querySelector('video');if(!n.showDialogue&&video)video.onended=()=>go(next(n.id,'next'));else document.querySelector('#next').onclick=()=>go(next(n.id,'next'))}if(n.kind==='choice'){app.innerHTML='<div class="stage"><div class="dialog"><p>'+n.prompt+'</p>'+n.choices.map(c=>'<button data-port="'+c.id+'">'+c.label+'</button>').join('')+'</div></div>';document.querySelectorAll('[data-port]').forEach(b=>b.onclick=()=>go(next(n.id,b.dataset.port)))}if(n.kind==='ending')app.innerHTML='<div class="stage"><div class="ending"><small>结局达成</small><h1>'+n.endingTitle+'</h1><button id="restart">重新开始</button></div></div>',document.querySelector('#restart').onclick=start}function start(){vars=Object.fromEntries(project.variables.map(v=>[v.id,v.initialValue]));go(project.nodes.find(n=>n.kind==='start').id)}start();<\/script></html>`;
 }

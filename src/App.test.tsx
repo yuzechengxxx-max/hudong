@@ -43,6 +43,24 @@ describe("editor workbench", () => {
     expect(screen.getByRole("heading", { name: "未完的来信" })).toBeVisible();
   });
 
+  it("shows and skips a wait interaction", async () => {
+    const project = createStarterProject();
+    project.nodes = [
+      { id: "start", kind: "start", title: "开始", position: { x: 0, y: 0 } },
+      { id: "wait", kind: "wait", title: "等待", position: { x: 100, y: 0 }, durationMs: 2000 },
+      { id: "after", kind: "scene", title: "等待后的场景", position: { x: 200, y: 0 }, mediaUrl: "", speaker: "", dialogue: "", showDialogue: false },
+    ];
+    project.edges = [
+      { id: "a", source: "start", sourcePort: "next", target: "wait" },
+      { id: "b", source: "wait", sourcePort: "next", target: "after" },
+    ];
+    localStorage.setItem("flowfilm-project", JSON.stringify(project));
+    render(<App/>);
+    expect(screen.getAllByText("等待 2 秒").length).toBeGreaterThan(0);
+    await userEvent.click(screen.getByRole("button", { name: "跳过等待" }));
+    expect(screen.getByRole("button", { name: "继续剧情" })).toBeVisible();
+  });
+
   it("adds and deletes a real choice node", async () => {
     const { container } = render(<App />);
     await createNodeFromCanvas(container, "玩家选择");
