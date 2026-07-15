@@ -289,6 +289,14 @@ describe("editor workbench", () => {
     expect(container.querySelector(".graph-toolbar .minimap-toggle")).not.toBeInTheDocument();
   });
 
+  it("toggles the canvas dot grid independently from the minimap", async () => {
+    render(<App />);
+    const toggle = screen.getByRole("button", { name: "隐藏点阵" });
+    expect(toggle).toBeEnabled();
+    await userEvent.click(toggle);
+    expect(screen.getByRole("button", { name: "显示点阵" })).toBeEnabled();
+  });
+
   it("renders a 300-node project without losing graph controls", () => {
     localStorage.setItem("flowfilm-project", JSON.stringify(createLargeProject(300)));
     render(<App />);

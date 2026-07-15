@@ -64,7 +64,8 @@ export function App() {
     if (!handle) return;
     let start: { x: number; y: number; width: number; height: number } | undefined;
     const onDown = (event: PointerEvent) => {
-      event.stopPropagation();
+      event.preventDefault();
+      event.stopImmediatePropagation();
       start = { x: event.clientX, y: event.clientY, width: rightWidth, height: inspectorHeight };
       handle.setPointerCapture(event.pointerId);
     };
